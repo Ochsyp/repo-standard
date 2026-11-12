@@ -7,7 +7,7 @@
 #   conf --check [FILE|-]     exit 0 when FILE parses
 #   conf --get KEY [FILE|-]   print KEY's value or its default; a repeatable key one per line
 #   conf --print [FILE|-]     print every key as KEY=value, with the defaults filled in
-#   conf --allow-lines FILE   print the line number of each PRIVACY_ALLOW line, when FILE parses
+#   conf --allow-lines FILE   print "LINE KIND" for each PRIVACY_ALLOW line, when FILE parses
 #   conf --defaults           print the defaults, for a repository without the file
 # FILE defaults to .github/standard.conf. Exit 0; 1 when the file does not parse, each problem on
 # stderr as "conf: line N: ..."; 2 when a check cannot run; 64 usage. A message never shows a
@@ -118,8 +118,9 @@ if [ "$mode" != --defaults ]; then
         { n = split(FILENAME, p, "/"); print p[n], $1 }' "$rules"/* > "$tmp/kinds" ||
         fail "cannot read the rule packs"
     [ -s "$tmp/kinds" ] || fail "the rule packs hold no rule"
-    # The EREs of every rule, to check that no PATH-ERE holds a value a pack would report.
-    LC_ALL=C awk '
+    # The EREs of every rule, to check that no PATH-ERE holds a value a pack would report: one
+    # per line in eres for a first grep, and "ERE US exempt-ERE" lines in rulesx.
+    LC_ALL=C awk -v us="$us" -v rulesx="$tmp/rulesx" '
         /^[ 	]*(#|$)/ { next }
         {
             n = 0; depth = 0; esc = 0
@@ -131,7 +132,10 @@ if [ "$mode" != --defaults ]; then
                 else if (c == ")") depth--
                 else if (c == "|" && depth == 0) at[++n] = i
             }
-            if (n == 2) print substr($0, at[1] + 1, at[2] - at[1] - 1)
+            if (n != 2) next
+            ere = substr($0, at[1] + 1, at[2] - at[1] - 1)
+            print ere
+            print ere us substr($0, at[2] + 1) > rulesx
         }' "$rules"/* > "$tmp/eres" || fail "cannot read the rule packs"
     # BINMODE=3 keeps gawk on Windows from dropping the CR of a CRLF line; other awks ignore it.
     LC_ALL=C awk -v BINMODE=3 -v us="$us" -v keys="$keys" '
@@ -289,10 +293,19 @@ if [ "$mode" != --defaults ]; then
                 continue 2
             fi
         done
-        if printf '%s\n' "$apath" | LC_ALL=C.UTF-8 grep -q -E -f "$tmp/eres"; then
-            printf 'conf: line %s: PRIVACY_ALLOW: the path ERE holds a value a rule pack matches\n' \
-                "$line" >&2
-            status=1
+        # A hit that the rule's own exempt ERE covers is no finding, as in a scan; a first grep
+        # with every rule keeps the common case, no hit at all, to one process.
+        printf '%s\n' "$apath" > "$tmp/apath"
+        if LC_ALL=C.UTF-8 grep -q -E -f "$tmp/eres" "$tmp/apath"; then
+            while IFS=$us read -r rere rex; do
+                LC_ALL=C.UTF-8 grep -o -E -e "$rere" "$tmp/apath" > "$tmp/ahits" || continue
+                if [ -z "$rex" ] || LC_ALL=C.UTF-8 grep -q -v -i -E -e "$rex" "$tmp/ahits"; then
+                    printf 'conf: line %s: PRIVACY_ALLOW: the path ERE holds a value a rule pack matches\n' \
+                        "$line" >&2
+                    status=1
+                    break
+                fi
+            done < "$tmp/rulesx"
         fi
         samples "$akind" > "$tmp/samples"
         if LC_ALL=C.UTF-8 grep -q -i -E -e "$avalue" "$tmp/samples"; then

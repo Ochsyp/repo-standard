@@ -10,9 +10,10 @@
 #   --history         --range over every ref, with the PRIVACY_HISTORY_ACCEPT records applied
 # It always checks the terms of every denylist (.githooks/lib.sh, deny_load), and the rule packs
 # that PRIVACY_RULES names, read from the committed .github/standard.conf with its PRIVACY_ALLOW
-# exemptions. The packs skip the PRIVACY_ALLOW lines of .github/standard.conf, each of which
-# names the synthetic value it exempts and which conf has checked; the denylist does not skip
-# them. It prints "privacy-scan: WHERE: KIND" per finding and never a matched value.
+# exemptions. On a PRIVACY_ALLOW line of .github/standard.conf that conf accepts, the packs skip
+# the hits of the line's own kind, since the line names the synthetic value it exempts and conf
+# has checked it; hits of other kinds, and the denylist, still count there. It prints
+# "privacy-scan: WHERE: KIND" per finding and never a matched value.
 # Exit 0 clean, 1 findings, 2 a check that cannot run (fail closed), 64 usage.
 set -eu
 
@@ -37,15 +38,20 @@ case $mode in
 esac
 
 # Run from the top of the work tree, as git runs hooks, so that every listing covers the whole
-# tree; a relative message file is read from where the command started. A bare mirror has no
-# work tree and stays where it is.
+# tree; a relative message file and a relative $PRIVACY_DENYLIST are read from where the command
+# started. A bare mirror has no work tree and stays where it is. CDPATH='' keeps cd from
+# following an exported CDPATH and printing the folder.
 if [ "$mode" = --message ] && [ "$1" != - ]; then
     case $1 in
         /* | [A-Za-z]:*) ;;
         *) set -- "$(pwd)/$1" ;;
     esac
 fi
-std_here=$(cd "$std_here" && pwd) || exit 2
+case ${PRIVACY_DENYLIST:-} in
+    '' | /* | [A-Za-z]:*) ;;
+    *) PRIVACY_DENYLIST=$(pwd)/$PRIVACY_DENYLIST && export PRIVACY_DENYLIST ;;
+esac
+std_here=$(CDPATH='' cd -- "$std_here" && pwd) || exit 2
 if std_top=$(git rev-parse --show-toplevel 2> /dev/null); then
     cd "$std_top" || exit 2
 fi

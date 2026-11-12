@@ -8,14 +8,16 @@ All notable changes to this project are listed here. The format follows
 
 ### Added
 
-- The git hooks of the standard: `pre-commit`, `pre-merge-commit`, `commit-msg` and `pre-push`
-  with full-ref branch guards, the tag rules, a staged-blob size guard and the copy guard, and
-  `privacy-scan` (`--staged`, `--tracked`, `--message`, `--range`, `--history`) with one
-  NUL-stripped stream and one grep per rule (phase 1)
+- The git hooks of the standard: `pre-commit`, `pre-merge-commit`, `commit-msg` (which drops only
+  what git's cleanup rules drop: the cut line's tail and, in the strip mode, comment lines) and
+  `pre-push`, with full-ref branch guards, the tag rules, a staged-blob size guard and the copy
+  guard, and `privacy-scan` (`--staged`, `--tracked`, `--message`, `--range`, `--history`) with
+  one NUL-stripped stream and one grep per rule (phase 1)
 - The denylist loader in `.githooks/lib.sh`: every `privacy.denylist` list (`--type=path`), the
   per-user and per-clone lists, `privacy.requireDenylist` (`--type=bool`), duplicate lists kept
-  once, a configured list without a term counted as missing, and lists named only as `~/...` or
-  "list N of M" (phase 1)
+  once, a configured list without a term counted as missing, terms with a fullwidth at sign read
+  as `@`, a relative `$PRIVACY_DENYLIST` read from where the command starts, and lists named only
+  as `~/...` or "list N of M" (phase 1)
 - The rule packs `base`, `disk` (with the `/dev/disk/by-id/` rule) and `vm`, the fullwidth at
   sign read as `@`, and the `PRIVACY_ALLOW` (one kind per line) and `PRIVACY_HISTORY_ACCEPT`
   limits (phase 1)
@@ -25,8 +27,9 @@ All notable changes to this project are listed here. The format follows
   their `lib.bash` (phase 1)
 - A temporary `bootstrap` workflow that runs the suites on Linux and in Git Bash on Windows
   (phase 1)
-- `tools/consumer-suite`, which builds a scratch consumer that holds only what the MANIFEST
-  vendors; `bootstrap` runs the standard's suites there too, so a vendored test that needs a file
-  only this repository holds fails in CI (phase 1)
+- `tools/consumer-suite`, which builds a scratch consumer of a public (MIT, tar) or a private
+  (no licence, legacy) shape that holds only what the MANIFEST vendors plus a file of its own;
+  `bootstrap` runs the standard's suites in one of each, so a vendored test that needs a file
+  only this repository holds, or scans a consumer's own files, fails in CI (phase 1)
 
 [Unreleased]: https://github.com/Ochsyp/repo-standard/commits/main

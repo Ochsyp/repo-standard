@@ -403,6 +403,14 @@ make_consumer() {
         sh -c 'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
     [ "$status" -eq 1 ]
     [[ $stderr == *"loosening comes from another repository"* ]]
+    git -C "$dir" switch -q -c feat/accept "$base"
+    write_config VISIBILITY=public PRIVACY_RULES=base "PRIVACY_HISTORY_ACCEPT=$base e-mail"
+    git -C "$dir" add .github/standard.conf
+    commit_unchecked "chore: accept an old finding"
+    BASE=$base HEAD_REF=feat/accept HEAD_REPO=o/r REPO=o/r run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"an exemption or accept record"* ]]
     git -C "$dir" switch -q -c feat/stages "$base"
     write_config VISIBILITY=public PRIVACY_RULES=base 'CI_STAGES=lint test'
     git -C "$dir" add .github/standard.conf

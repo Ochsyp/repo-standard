@@ -151,6 +151,76 @@ has_entry() {
     [[ $stderr == *"is not empty"* ]]
 }
 
+@test "tools/manifest refuses a vendored path with a blank and a VERSION of two lines" {
+    make_source
+    printf '#!/bin/sh\n' > "$REPO/.github/standard/bin/my tool"
+    git -C "$REPO" add -- '.github/standard/bin/my tool'
+    run_manifest --print
+    [ "$status" -eq 2 ]
+    [[ $stderr == *".github/standard/bin/my tool: a vendored path holds a blank"* ]]
+    git -C "$REPO" rm -q --cached -- '.github/standard/bin/my tool'
+    printf '1.0.0\nmore\n' > "$REPO/VERSION"
+    git -C "$REPO" add VERSION
+    run_manifest --print
+    [ "$status" -eq 2 ]
+    [[ $stderr == *"VERSION is not one line"* ]]
+}
+
+# Give the source repository at $REPO tools/consumer-suite and a staged MANIFEST.
+source_with_manifest() {
+    make_source
+    cp "$REPO_ROOT/tools/consumer-suite" "$REPO/tools/consumer-suite"
+    run_manifest
+    git -C "$REPO" add .github/standard/MANIFEST tools/consumer-suite
+}
+
+# Run tools/consumer-suite ARGS in $REPO through bats `run`, stderr apart.
+run_consumer_suite() {
+    run --separate-stderr sh -c 'cd "$1" && shift && exec sh tools/consumer-suite "$@"' sh "$REPO" "$@"
+}
+
+@test "tools/consumer-suite builds the public and the private shape from the profiles" {
+    local pub=$BATS_TEST_TMPDIR/public priv=$BATS_TEST_TMPDIR/private
+    source_with_manifest
+    run_consumer_suite "$pub"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $output == *", public shape" ]]
+    # public: LICENSE (mit), the release workflow and the releasing block, no private block.
+    [ "$(git -C "$pub" rev-parse :LICENSE)" = "$(git -C "$REPO" rev-parse :LICENSE)" ]
+    [ "$(git -C "$pub" rev-parse :.github/workflows/release.yml)" = \
+        "$(git -C "$REPO" rev-parse :.github/workflows/release.yml)" ]
+    grep -q -x -F '<!-- standard:begin releasing -->' "$pub/CONTRIBUTING.md"
+    [ ! -e "$pub/SECURITY.md" ]
+    [ "$(sh "$pub/.github/standard/bin/conf" --get VISIBILITY "$pub/.github/standard.conf")" = public ]
+    run_consumer_suite --shape private "$priv"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $output == *", private shape" ]]
+    # private: no LICENSE, a release workflow of its own, the private block, no releasing block.
+    [ ! -e "$priv/LICENSE" ]
+    [ "$(git -C "$priv" rev-parse :.github/workflows/release.yml)" != \
+        "$(git -C "$REPO" rev-parse :.github/workflows/release.yml)" ]
+    grep -q -x -F '<!-- standard:begin reporting -->' "$priv/SECURITY.md"
+    [ ! -e "$priv/CONTRIBUTING.md" ]
+    [ "$(sh "$priv/.github/standard/bin/conf" --get RELEASE_KIND "$priv/.github/standard.conf")" = legacy ]
+    # Both hold a file of their own that only the disk pack reports.
+    [ -f "$pub/docs/fstab.example" ] && [ -f "$priv/docs/fstab.example" ]
+}
+
+@test "tools/consumer-suite stops on a MANIFEST line that does not parse, and keeps DEST in place" {
+    source_with_manifest
+    # A relative DEST under an exported CDPATH, and MSYS_NO_PATHCONV, which in Git Bash keeps the
+    # paths git gets from being converted.
+    run --separate-stderr sh -c 'cd "$1" && CDPATH=. MSYS_NO_PATHCONV=1 exec sh tools/consumer-suite rel' \
+        sh "$REPO"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ -n "$(git -C "$REPO/rel" ls-files)" ]
+    printf 'file all 0123 100644 a b\n' >> "$REPO/.github/standard/MANIFEST"
+    git -C "$REPO" add .github/standard/MANIFEST
+    run_consumer_suite "$BATS_TEST_TMPDIR/bad"
+    [ "$status" -eq 2 ]
+    [[ $stderr == *"the MANIFEST line "*" does not parse"* ]]
+}
+
 # bats test_tags=lint
 @test "ShellCheck reports nothing in tools/, ci/ and tests/" {
     need command shellcheck

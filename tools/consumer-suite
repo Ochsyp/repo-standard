@@ -3,30 +3,47 @@
 # so that CI runs the standard's suites where only the vendored files exist, as in every
 # consumer. A test that needs a file only repo-standard holds, such as blocks/ or tools/, then
 # fails before a release. It runs here only; it is not vendored.
-#   tools/consumer-suite [--rev REV] DEST
+#   tools/consumer-suite [--rev REV] [--shape public|private] DEST
 # It reads the MANIFEST of the index, or of the commit REV, and builds the repository DEST, which
-# must be missing or empty. DEST holds the MANIFEST and what it gives a public consumer with
-# LICENSE=MIT and RELEASE_KIND=tar: each file entry, written from the blob the entry names with
-# the entry's mode, and each block between its markers in its target file. It also holds that
-# consumer's .github/standard.conf, and a ci/test and a ci/test.ps1. They are committed once in
-# a source repository and cloned into DEST, so the work tree has the line ends of a checkout:
+# must be missing or empty. The shape picks the consumer's config and what the MANIFEST gives it,
+# as standard-check selects it:
+#   public   VISIBILITY=public, LICENSE=MIT, RELEASE_KIND=tar (the default): the profiles all,
+#            release, mit and public.
+#   private  VISIBILITY=private, LICENSE=none, RELEASE_KIND=legacy: the profiles all and
+#            private; each release file is the consumer's own, as under legacy, and no release
+#            block.
+# Each file entry is written from the blob the entry names, with the entry's mode, and each block
+# between its markers in its target file. DEST also holds the MANIFEST, the shape's
+# .github/standard.conf (PRIVACY_RULES=base), a ci/test and a ci/test.ps1, and docs/fstab.example,
+# a file of the consumer's own that only the disk pack reports. They are committed once in a
+# source repository and cloned into DEST, so the work tree has the line ends of a checkout:
 # ci/test.ps1 gets CRLF. git runs without the global and the system config and without a
-# template, so no hook, identity or setting of the machine takes part.
-# Then run the suites there: bats DEST/.github/standard/tests/
+# template, so no hook, identity or setting of the machine takes part, and it gets native paths,
+# so MSYS_NO_PATHCONV does not move the clone. Then run the suites there:
+#   bats DEST/.github/standard/tests/
 set -eu
 
 usage() {
-    echo "usage: tools/consumer-suite [--rev REV] DEST" >&2
+    echo "usage: tools/consumer-suite [--rev REV] [--shape public|private] DEST" >&2
     exit 64
 }
 
 rev=
+shape=public
 dest=
 while [ "$#" -gt 0 ]; do
     case $1 in
         --rev)
             [ "$#" -ge 2 ] || usage
             rev=$2
+            shift
+            ;;
+        --shape)
+            [ "$#" -ge 2 ] || usage
+            case $2 in
+                public | private) shape=$2 ;;
+                *) usage ;;
+            esac
             shift
             ;;
         -*) usage ;;
@@ -44,15 +61,22 @@ fail() {
     exit 2
 }
 
+# The absolute, native form of the folder $1 (C:/... in Git Bash, as git.exe reads it), with
+# CDPATH off so that cd prints nothing.
+native() {
+    (CDPATH='' cd -- "$1" && { pwd -W 2> /dev/null || pwd; })
+}
+
 top=$(git rev-parse --show-toplevel 2> /dev/null) || fail "not in a git work tree"
 if [ -e "$dest" ] && [ -n "$(ls -A -- "$dest")" ]; then
     fail "$dest is not empty"
 fi
 mkdir -p -- "$dest" || fail "cannot create $dest"
-dest=$(cd -- "$dest" && pwd) || fail "cannot enter $dest"
+dest=$(native "$dest") || fail "cannot enter $dest"
 cd "$top"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/consumer-suite.XXXXXX") || exit 2
 trap 'rm -rf -- "$tmp"' EXIT
+tmp=$(native "$tmp") || fail "cannot enter the temp folder"
 src=$tmp/source
 
 # The MANIFEST: of the commit REV, or of the index.
@@ -65,11 +89,22 @@ fi
 [ -n "$mo" ] || fail ".github/standard/MANIFEST is missing"
 git cat-file blob "$mo" > "$tmp/manifest" || fail "cannot read the MANIFEST"
 
-# The entries this consumer takes, as "type oid mode path" lines: standard-check selects the
-# same profiles for VISIBILITY=public, LICENSE=MIT and RELEASE_KIND=tar.
-awk '($1 == "file" || $1 == "block") && NF == 5 &&
-    ($2 == "all" || $2 == "release" || $2 == "mit" || $2 == "public") { print $1, $3, $4, $5 }' \
-    "$tmp/manifest" > "$tmp/entries"
+# The entries this consumer takes, as "type profile oid mode path" lines. A file or block line
+# that does not parse, or names an unknown profile, stops the build.
+SHAPE=$shape awk '
+    /^#/ || /^[ \t]*$/ { next }
+    $1 == "standard" { next }
+    {
+        if (($1 != "file" && $1 != "block") || NF != 5 || $2 !~ /^(all|release|mit|public|private|seal)$/) {
+            printf "consumer-suite: the MANIFEST line %d does not parse\n", NR > "/dev/stderr"
+            bad = 1
+            next
+        }
+        if (ENVIRON["SHAPE"] == "public") take = $2 != "private" && $2 != "seal"
+        else take = $2 == "all" || $2 == "private" || ($2 == "release" && $1 == "file")
+        if (take) print $1, $2, $3, $4, $5
+    }
+    END { exit bad }' "$tmp/manifest" > "$tmp/entries" || exit 2
 [ -s "$tmp/entries" ] || fail "the MANIFEST lists nothing"
 
 # From here on git reads no global or system config and finds each repository by its folder.
@@ -81,12 +116,17 @@ export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 git init -q -b main --template="$tmp/template" "$src" || fail "cannot create the source repository"
 
-while read -r type oid mode path; do
+while read -r type profile oid mode path; do
     case $type in
         file)
             mkdir -p -- "$src/$(dirname -- "$path")"
-            git -C "$top" cat-file blob "$oid" > "$src/$path" ||
-                fail "cannot read the blob of $path: is the MANIFEST stale?"
+            if [ "$shape" = private ] && [ "$profile" = release ]; then
+                printf '# %s of this consumer: its own under RELEASE_KIND=legacy.\n' "$path" \
+                    > "$src/$path"
+            else
+                git -C "$top" cat-file blob "$oid" > "$src/$path" ||
+                    fail "cannot read the blob of $path: is the MANIFEST stale?"
+            fi
             if [ "$mode" = 100755 ]; then chmod +x "$src/$path"; fi
             ;;
         block)
@@ -107,19 +147,26 @@ while read -r type oid mode path; do
             ;;
     esac
 done < "$tmp/entries"
+mkdir -p "$src/.github/standard"
 cp "$tmp/manifest" "$src/.github/standard/MANIFEST"
 
-cat > "$src/.github/standard.conf" << 'EOF'
-# The config of a scratch consumer that tools/consumer-suite of repo-standard builds.
-NAME=example
-VISIBILITY=public
-RELEASE_KIND=tar
-PRIVACY_RULES=base
-EOF
+{
+    echo "# The config of a scratch consumer that tools/consumer-suite of repo-standard builds."
+    echo "NAME=example"
+    if [ "$shape" = public ]; then
+        echo "VISIBILITY=public"
+        echo "RELEASE_KIND=tar"
+    else
+        echo "VISIBILITY=private"
+        echo "LICENSE=none"
+        echo "RELEASE_KIND=legacy"
+    fi
+    echo "PRIVACY_RULES=base"
+} > "$src/.github/standard.conf"
 sh "$src/.github/standard/bin/conf" --check "$src/.github/standard.conf" ||
     fail "the consumer's config does not parse"
 
-mkdir -p "$src/ci"
+mkdir -p "$src/ci" "$src/docs"
 cat > "$src/ci/test" << 'EOF'
 #!/bin/sh
 # ci/test of a scratch consumer that tools/consumer-suite of repo-standard builds.
@@ -133,11 +180,14 @@ cat > "$src/ci/test.ps1" << 'EOF'
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 EOF
+# A FAT serial: the config's base pack passes it, the disk pack reports it. A vendored test that
+# scans more than the standard's copies with every pack then fails here.
+printf 'UUID=%s-%s  /boot/efi  vfat  umask=0077  0  1\n' 1A2B 3C4D > "$src/docs/fstab.example"
 
 git -C "$src" -c core.safecrlf=false add -A || fail "cannot stage the files"
 # git on Windows stages new files as 100644: give the executables their mode.
 {
-    awk '$1 == "file" && $3 == "100755" { print $4 }' "$tmp/entries"
+    awk '$1 == "file" && $4 == "100755" { print $5 }' "$tmp/entries"
     echo ci/test
 } | xargs git -C "$src" update-index --chmod=+x -- || fail "cannot set the modes"
 git -C "$src" -c user.name="Consumer Suite" -c user.email=consumer-suite@example.invalid \
@@ -145,15 +195,26 @@ git -C "$src" -c user.name="Consumer Suite" -c user.email=consumer-suite@example
 git clone -q --template="$tmp/template" "$src" "$dest" || fail "cannot clone into $dest"
 git -C "$dest" remote remove origin || fail "cannot remove the source remote"
 
-# Every file entry is in DEST with the blob and the mode the MANIFEST names.
+# DEST holds the commit, and every file entry with the blob and the mode the MANIFEST names;
+# under the private shape a release file is the consumer's own.
 git -C "$dest" ls-files -s > "$tmp/files" || fail "cannot list $dest"
-awk 'NR == FNR { if ($1 == "file") { want[$4] = $3 " " $2; n++ } next }
-    { split($0, f, "\t"); split(f[1], m, " ")
-      if ((f[2] in want) && want[f[2]] == m[1] " " m[2]) ok++ }
+[ -s "$tmp/files" ] || fail "the clone did not land in $dest"
+SHAPE=$shape awk 'NR == FNR {
+        if ($1 == "file") {
+            n++
+            want[$5] = (ENVIRON["SHAPE"] == "private" && $2 == "release") ? $4 : $4 " " $3
+        }
+        next
+    }
+    {
+        split($0, f, "\t"); split(f[1], m, " ")
+        if (!(f[2] in want)) next
+        if (want[f[2]] == m[1] " " m[2] || want[f[2]] == m[1]) ok++
+    }
     END { exit ok != n }' "$tmp/entries" "$tmp/files" ||
     fail "$dest does not hold each file with the MANIFEST's blob and mode"
 
-printf 'consumer-suite: %s holds %s file(s) and %s block(s) of standard %s\n' "$dest" \
+printf 'consumer-suite: %s holds %s file(s) and %s block(s) of standard %s, %s shape\n' "$dest" \
     "$(awk '$1 == "file"' "$tmp/entries" | awk 'END { print NR }')" \
     "$(awk '$1 == "block"' "$tmp/entries" | awk 'END { print NR }')" \
-    "$(awk '$1 == "standard" { print $2; exit }' "$tmp/manifest")"
+    "$(awk '$1 == "standard" { print $2; exit }' "$tmp/manifest")" "$shape"

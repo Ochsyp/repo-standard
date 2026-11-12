@@ -158,11 +158,22 @@ synthetic() {
     [ "$status" -eq 0 ]
 }
 
+@test "the copies are the MANIFEST's file entries that the config selects, as standard-check does" {
+    local manifest=$BATS_TEST_TMPDIR/MANIFEST conf=$BATS_TEST_TMPDIR/standard.conf
+    { printf 'standard 1.0.0\n'
+      printf 'file %s 0123 100644 %s\n' all a release r mit LICENSE public p private q
+      printf 'block all 0123 - x.md#y\n'; } > "$manifest"
+    printf 'NAME=example\nVISIBILITY=public\nRELEASE_KIND=tar\n' > "$conf"
+    [ "$(manifest_copies "$manifest" "$conf" | tr '\n' ' ')" = "a r LICENSE p " ]
+    printf 'NAME=example\nVISIBILITY=private\nLICENSE=none\nRELEASE_KIND=legacy\n' > "$conf"
+    [ "$(manifest_copies "$manifest" "$conf" | tr '\n' ' ')" = "a q " ]
+}
+
 @test "the standard's copies pass every rule pack" {
     REPO="$BATS_TEST_TMPDIR/copy"
-    # Only the copies, the MANIFEST's file entries: a repository's own files belong to its own
-    # --tracked scan, with its own packs and exemptions.
-    awk '$1 == "file" { print $5 }' "$REPO_ROOT/.github/standard/MANIFEST" |
+    # Only the copies this repository holds: a repository's own files, its legacy release files
+    # among them, belong to its own --tracked scan, with its own packs and exemptions.
+    manifest_copies "$REPO_ROOT/.github/standard/MANIFEST" "$REPO_ROOT/.github/standard.conf" |
         git -C "$REPO_ROOT" checkout-index --prefix="$REPO/" --stdin
     git init -q -b main "$REPO"
     git -C "$REPO" config user.name "Test User"
@@ -326,6 +337,13 @@ synthetic() {
     [ "$status" -eq 1 ]
     [[ $stderr == *".github/standard.conf:5: e-mail"* ]]
     [[ $stderr != *"home-path"* ]]
+    # A value of the line's own kind in its path ERE: conf refuses the line, so nothing skips it.
+    write_config PRIVACY_RULES=base \
+        "$(printf 'PRIVACY_ALLOW=home-path ^/%s/quuxly ^/%s/example-user$' home home)"
+    git -C "$REPO" add .github/standard.conf
+    scan --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *".github/standard.conf:5: home-path"* ]]
 }
 
 @test "--history keeps reporting a later value at a path whose old finding is accepted" {
@@ -363,6 +381,58 @@ synthetic() {
         sh "$REPO"
     [ "$status" -eq 1 ]
     [[ $stderr == *"message line 1: host-name"* ]]
+}
+
+@test "fat-serial covers quoted, ieee1275 and parenthesised GRUB hints, and exempts only its own serial" {
+    local s=1A2B-3C4D syn=5CA1-AB1E line
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    commit_config 'PRIVACY_RULES=disk'
+    { printf "search --no-floppy --fs-uuid --set=root --hint='hd0,msdos1'  %s\n" "$s"
+      printf "search --fs-uuid --hint-ieee1275='ieee1275//vdevice/v-scsi@3000/disk@%s%s,msdos2' --hint-bios=hd0,msdos2  %s\n" \
+          81000000 00000000 "$s"
+      printf 'search --fs-uuid --set=root --hint=(hd0,gpt1) %s\n' "$s"
+      printf 'search --fs-uuid --hint=%s --set=root %s\n' "$syn" "$s"
+      printf 'search --fs-uuid --set=root %s\n' "$syn"
+      printf 'search --fs-uuid --set=root\t%s\n' "$s"
+    } > "$REPO/grub.cfg"
+    git -C "$REPO" add grub.cfg
+    scan --staged
+    [ "$status" -eq 1 ]
+    for line in 1 2 3 4 6; do
+        [[ $stderr == *"grub.cfg:$line: fat-serial"* ]] ||
+            { printf 'line %s: no fat-serial finding\n' "$line" >&2; return 1; }
+    done
+    [[ $stderr != *"grub.cfg:5: fat-serial"* ]]
+}
+
+@test "a denylist term written with a fullwidth at sign matches either at sign" {
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    commit_config 'PRIVACY_RULES='
+    write_denylist "$(printf 'contact-%s\357\274\240example.invalid' "$DENY_TERM")"
+    { printf 'by contact-%s@example.invalid\n' "$DENY_TERM"
+      printf 'by contact-%s\357\274\240example.invalid\n' "$DENY_TERM"
+    } > "$REPO/notes.txt"
+    git -C "$REPO" add notes.txt
+    scan --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"notes.txt:1: denylist"* ]]
+    [[ $stderr == *"notes.txt:2: denylist"* ]]
+    refute_term_shown
+}
+
+@test "a relative PRIVACY_DENYLIST is read from where privacy-scan starts" {
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    stage top.txt "contact $DENY_TERM"
+    mkdir -p "$REPO/docs/lists"
+    printf '%s\n' "$DENY_TERM" > "$REPO/docs/lists/mine"
+    run --separate-stderr sh -c \
+        'cd "$1/docs" && PRIVACY_DENYLIST=lists/mine exec sh ../.githooks/privacy-scan --staged' sh "$REPO"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"top.txt:1: denylist"* ]]
+    refute_term_shown
 }
 
 @test "privacy-scan run from a subdirectory scans the whole tree" {

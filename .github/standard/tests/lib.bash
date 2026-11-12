@@ -6,7 +6,7 @@
 #   Scratch repositories: make_repo, commit_config, add_remote, stage, stage_executables,
 #     try_commit, commit_count, run_pre_push, write_denylist, utf16le.
 #   Checks: refute_term_shown, refute_home_shown, assert_tmpdir_empty.
-#   Other: need, use_symlinks, run_shellcheck, shellcheck_code_counts.
+#   Other: need, use_symlinks, run_shellcheck, shellcheck_code_counts, manifest_copies.
 #   Stubs: stub_init, mkstub (body on stdin), stub_refuse.
 
 bats_require_minimum_version 1.13.0
@@ -246,11 +246,27 @@ stage_executables() {
 }
 
 # Create the stub folder $STUB_BIN and the log $STUB_LOG that every stub appends its call to.
+# STUB_BIN is the folder as pwd prints it: a TMPDIR in C:/ form would put a drive colon into
+# PATH, which splits there and keeps the stubs off it.
 stub_init() {
-    export STUB_BIN="$BATS_TEST_TMPDIR/stub-bin"
+    mkdir -p "$BATS_TEST_TMPDIR/stub-bin"
+    STUB_BIN=$(CDPATH='' cd -- "$BATS_TEST_TMPDIR/stub-bin" && pwd)
+    export STUB_BIN
     export STUB_LOG="$BATS_TEST_TMPDIR/stub.log"
-    mkdir -p "$STUB_BIN"
     : > "$STUB_LOG"
+}
+
+# Print the paths of the file entries of the MANIFEST file MANIFEST that the config file CONF
+# selects, as standard-check does: the profile all; release, unless RELEASE_KIND=legacy makes
+# those files the repository's own; mit under LICENSE=MIT; and the profile VISIBILITY names.
+manifest_copies() {
+    local manifest=$1 conf=$2 vis lic kind
+    vis=$(sh "$REPO_ROOT/.github/standard/bin/conf" --get VISIBILITY "$conf") || return 1
+    lic=$(sh "$REPO_ROOT/.github/standard/bin/conf" --get LICENSE "$conf") || return 1
+    kind=$(sh "$REPO_ROOT/.github/standard/bin/conf" --get RELEASE_KIND "$conf") || return 1
+    awk -v vis="$vis" -v lic="$lic" -v kind="$kind" '
+        $1 == "file" && NF == 5 && ($2 == "all" || $2 == vis || ($2 == "mit" && lic == "MIT") ||
+            ($2 == "release" && kind != "legacy")) { print $5 }' "$manifest"
 }
 
 # The shared start of every stub: append "NAME ARGS" to $STUB_LOG, each argument %q-quoted.

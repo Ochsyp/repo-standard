@@ -8,9 +8,10 @@ uuid|\b[0-9A-Fa-f]{8,9}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]
 uuid-dashless|\b[0-9A-Fa-f]{32}\b|^5ca1ab1e
 # NTFS volume serials.
 ntfs-serial|\b[0-9A-Fa-f]{16}\b|^5ca1ab1e
-# FAT volume serials, in fstab, blkid or GRUB form. Only option words may stand between
-# --fs-uuid and the serial, so a hit never spans two serials of one line.
-fat-serial|(UUID=.?|--fs-uuid( +-[-A-Za-z0-9=,_]+)* +)[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}\b|5ca1-ab1e$
+# FAT volume serials, in fstab, blkid or GRUB form. Only option words, each starting with -
+# (quoted or parenthesised hints included), may stand between --fs-uuid and the serial, so a hit
+# ends at the first serial that is no option, and the exemption covers that serial alone.
+fat-serial|(UUID=.?|--fs-uuid([[:blank:]]+-[^[:space:]]+)*[[:blank:]]+)[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}\b|5ca1-ab1e$
 # LVM physical and logical volume UUIDs.
 lvm-uuid|\b[0-9A-Za-z]{6}(-[0-9A-Za-z]{4}){5}-[0-9A-Za-z]{6}\b|^5ca1ab
 # MBR PARTUUIDs and PTUUIDs, which carry the disk signature.

@@ -623,6 +623,107 @@ named_home() {
     refute_term_shown
 }
 
+@test "commit-msg refuses a # line of -m and -F, which git keeps without an editor" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    stage notes.txt 'synthetic notes'
+    try_commit "$(printf 'docs: add notes\n\n#12 seen by %s' "$DENY_TERM")"
+    [ "$status" -ne 0 ]
+    [[ $output == *"message line 3: denylist"* ]]
+    printf 'docs: add notes\n\n#7 seen by %s\n' "$DENY_TERM" > "$BATS_TEST_TMPDIR/message"
+    run git -C "$REPO" commit -q -F "$BATS_TEST_TMPDIR/message"
+    [ "$status" -ne 0 ]
+    [[ $output == *"message line 3: denylist"* ]]
+    refute_term_shown
+    [ "$(commit_count)" -eq 1 ]
+}
+
+@test "commit-msg follows commit.cleanup: only strip drops # lines, with an editor or without" {
+    local mode
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    stage notes.txt 'synthetic notes'
+    for mode in whitespace verbatim scissors; do
+        run env GIT_EDITOR=true git -C "$REPO" -c commit.cleanup="$mode" commit -q -e \
+            -m "docs: add notes" -m "#$DENY_TERM"
+        [ "$status" -ne 0 ] || { printf 'commit.cleanup=%s let the line through\n' "$mode" >&2; return 1; }
+        [[ $output == *"message line 3: denylist"* ]]
+    done
+    run env GIT_EDITOR=true git -C "$REPO" commit -q -e -m "docs: add notes" -m "#$DENY_TERM"
+    [ "$status" -eq 0 ]
+    [[ $(git -C "$REPO" log -1 --format=%B) != *"$DENY_TERM"* ]]
+    stage more.txt 'synthetic notes'
+    run git -C "$REPO" -c commit.cleanup=strip commit -q -m "docs: add more" -m "#$DENY_TERM"
+    [ "$status" -eq 0 ]
+    refute_term_shown
+    [ "$(commit_count)" -eq 3 ]
+}
+
+@test "commit-msg cuts only at git's cut line, written with git's comment string" {
+    local cut='------------------------ >8 ------------------------'
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    stage notes.txt 'synthetic notes'
+    # Another comment character: git does not cut there.
+    try_commit "$(printf 'docs: add notes\n\nx %s\ncontact %s' "$cut" "$DENY_TERM")"
+    [ "$status" -ne 0 ]
+    [[ $output == *"message line 4: denylist"* ]]
+    # git's cut line typed in an editor commit without -v: strip drops the line, keeps the rest.
+    run env GIT_EDITOR=true git -C "$REPO" commit -q -e -m "docs: add notes" -m "# $cut" \
+        -m "contact $DENY_TERM"
+    [ "$status" -ne 0 ]
+    [[ $output == *": denylist"* ]]
+    refute_term_shown
+    [ "$(commit_count)" -eq 1 ]
+}
+
+@test "commit-msg cuts the -v diff under a comment string of two characters" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c fix/cleanup
+    stage notes.txt "contact $DENY_TERM"
+    commit_unchecked "docs: add notes"
+    # In a subshell: MSYS_NO_PATHCONV keeps Git Bash from reading ;; as a path list, and would
+    # also keep a -C path from being converted.
+    (cd "$REPO" && MSYS_NO_PATHCONV=1 git config core.commentString ';;')
+    [ "$(git -C "$REPO" config --get core.commentString)" = ';;' ]
+    stage notes.txt 'synthetic notes'
+    run env GIT_EDITOR=true git -C "$REPO" commit -q -v -e -m "fix: remove the private term"
+    [ "$status" -eq 0 ]
+    refute_term_shown
+}
+
+@test "commit-msg hands privacy-scan a copy of the message that only the user can read" {
+    local probe=$BATS_TEST_TMPDIR/probe
+    # Where the file system keeps no modes, as in Git Bash, there is nothing to see.
+    : > "$probe"
+    chmod 600 "$probe"
+    [[ $(stat -c %a "$probe" 2> /dev/null) == 600 ]] || return 0
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    printf '#!/bin/sh\n[ "$1" = --message ] || exit 0\nstat -c %%a "$2" > "%s/mode"\n' \
+        "$BATS_TEST_TMPDIR" > "$REPO/.githooks/privacy-scan"
+    stage notes.txt 'synthetic notes'
+    (umask 022 && GIT_EDITOR=true git -C "$REPO" commit -q -e -m "docs: add notes")
+    [ "$(cat "$BATS_TEST_TMPDIR/mode")" = 600 ]
+}
+
+@test "commit-msg keeps every line under core.commentChar=auto" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    git -C "$REPO" config core.commentChar auto
+    stage notes.txt 'synthetic notes'
+    run env GIT_EDITOR=true git -C "$REPO" commit -q -e -m "#$DENY_TERM notes"
+    [ "$status" -ne 0 ]
+    [[ $output == *"message line 1: denylist"* ]]
+    refute_term_shown
+    [ "$(commit_count)" -eq 1 ]
+}
+
 @test "pre-commit refuses a commit on main checked out as MAIN" {
     make_repo
     git -C "$REPO" symbolic-ref HEAD refs/heads/MAIN
@@ -664,20 +765,83 @@ named_home() {
     refute_term_shown
 }
 
-@test "pre-push scans the names a root commit adds, whatever log.showRoot and showSignature say" {
+@test "pre-push scans the names a root commit adds, whatever log.showRoot says" {
     make_repo
     add_remote
     write_denylist
     git config --global log.showRoot false
-    git config --global log.showSignature true
     git -C "$REPO" switch -q --orphan feat/example
-    # README.md's content, which origin already holds: only the path name is new.
-    stage "docs/notes-$DENY_TERM.md" 'synthetic test repository'
+    stage "docs/notes-$DENY_TERM.md" 'synthetic notes'
     commit_unchecked "docs: add notes"
+    # Renamed: the pushed tree names only the new path, so only the root commit's diff shows
+    # the first one.
+    git -C "$REPO" mv "docs/notes-$DENY_TERM.md" docs/notes.md
+    commit_unchecked "docs: rename the notes"
     run_pre_push refs/heads/feat/example
     [ "$status" -ne 0 ]
-    [[ $output == *"path name 1 of the scanned paths: denylist"* ]]
+    [[ $output == *"path name "*" of the scanned paths: denylist"* ]]
     refute_term_shown
+}
+
+@test "pre-push reads no path name from the signature check that log.showSignature adds" {
+    local key=$BATS_TEST_TMPDIR/signing-key
+    need command ssh-keygen
+    make_repo
+    add_remote
+    write_denylist
+    git config --global log.showSignature true
+    ssh-keygen -q -t ed25519 -N '' -C '' -f "$key"
+    # The check names the signer from this list: here the denylist term.
+    printf '%s %s\n' "$DENY_TERM" "$(cat "$key.pub")" > "$BATS_TEST_TMPDIR/allowed-signers"
+    git -C "$REPO" config gpg.format ssh
+    git -C "$REPO" config user.signingkey "$key"
+    git -C "$REPO" config gpg.ssh.allowedSignersFile "$BATS_TEST_TMPDIR/allowed-signers"
+    git -C "$REPO" switch -q -c feat/example
+    stage notes.txt 'synthetic notes'
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -S -m "docs: add signed notes"
+    [[ $(git -C "$REPO" log -1 --format= --name-only) == *"$DENY_TERM"* ]]
+    run_pre_push refs/heads/feat/example
+    [ "$status" -eq 0 ]
+    refute_term_shown
+}
+
+@test "the hooks run under an exported CDPATH" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    stage notes.txt 'synthetic notes'
+    run env CDPATH=. git -C "$REPO" commit -q -m "docs: add notes"
+    [ "$status" -eq 0 ]
+    [ "$(commit_count)" -eq 2 ]
+}
+
+@test "the copy guard never shows an indexed path name that holds a term" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    commit_config
+    stage .github/standard/MANIFEST 'standard 1.0.0'
+    commit_unchecked "chore: adopt the standard"
+    # As a cherry-pick, rebase or am would: in the index, never staged through the hooks.
+    stage ".github/workflows/deploy-$DENY_TERM.yml" 'name: deploy'
+    commit_unchecked "ci: add a deploy workflow"
+    write_config CI_WEEKLY=yes
+    git -C "$REPO" add .github/standard.conf
+    try_commit "ci: run weekly"
+    [ "$status" -ne 0 ]
+    [[ $output == *"holds a finding"* ]]
+    refute_term_shown
+}
+
+@test "stub_init gives PATH a stub folder without a drive colon" {
+    # A TMPDIR in C:/ form, as Git Bash on Windows may inherit it.
+    if command -v cygpath > /dev/null 2>&1; then
+        BATS_TEST_TMPDIR=$(cygpath -m "$BATS_TEST_TMPDIR")
+    fi
+    stub_init
+    [[ $STUB_BIN != *:* ]]
+    mkstub git <<< 'echo stub-git'
+    [ "$(PATH="$STUB_BIN:$PATH" sh -c 'git')" = stub-git ]
 }
 
 @test "pre-push gives the rename advice only for a finding, not when the scan cannot run" {

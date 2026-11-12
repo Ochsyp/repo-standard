@@ -29,6 +29,11 @@ top=$(git rev-parse --show-toplevel 2> /dev/null) || {
     echo "standard-check: not in a git work tree" >&2
     exit 2
 }
+# A relative $PRIVACY_DENYLIST is read from where the command started, as in privacy-scan.
+case ${PRIVACY_DENYLIST:-} in
+    '' | /* | [A-Za-z]:*) ;;
+    *) PRIVACY_DENYLIST=$(pwd)/$PRIVACY_DENYLIST && export PRIVACY_DENYLIST ;;
+esac
 cd "$top"
 bin=.github/standard/bin
 std_hook=standard-check

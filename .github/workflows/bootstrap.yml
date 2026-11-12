@@ -1,9 +1,11 @@
 # Temporary CI of repo-standard's phase 1. Phase 2 removes it and brings the standard's own
 # workflows. It runs the standard's suites and the tests of tools/ on Linux, and in Git Bash on
 # Windows, with bats pinned through install-tools, so phase 1 does not merge untested. It runs
-# the standard's suites again in a scratch consumer that holds only what the MANIFEST vendors
-# (tools/consumer-suite), so a test that needs a file only repo-standard holds fails here. On
-# Linux it also runs the lint suite, the privacy rules over the tree and the MANIFEST check.
+# the standard's suites again in two scratch consumers that hold only what the MANIFEST vendors
+# (tools/consumer-suite: a public MIT tar shape and a private legacy shape without a licence),
+# so a test that needs a file only repo-standard holds, or reads a consumer's own files, fails
+# here. On Linux it also runs the lint suite, the privacy rules over the tree and the MANIFEST
+# check.
 name: bootstrap
 
 on:
@@ -35,14 +37,22 @@ jobs:
         run: bats --tap .github/standard/tests/ | tee "$RUNNER_TEMP/standard.tap"
       - name: The tests of tools/
         run: bats --tap tests/ | tee "$RUNNER_TEMP/tools.tap"
-      - name: A scratch consumer with only what the MANIFEST vendors
-        run: sh tools/consumer-suite ../consumer
-      - name: The standard's suites in the scratch consumer, lint included
-        run: bats --tap ../consumer/.github/standard/tests/ | tee "$RUNNER_TEMP/consumer.tap"
+      - name: Two scratch consumers with only what the MANIFEST vendors, one per shape
+        run: |
+          sh tools/consumer-suite --shape public ../consumer-public
+          sh tools/consumer-suite --shape private ../consumer-private
+      - name: The standard's suites in the public consumer, lint included
+        run: >-
+          bats --tap ../consumer-public/.github/standard/tests/
+          | tee "$RUNNER_TEMP/consumer-public.tap"
+      - name: The standard's suites in the private consumer, lint included
+        run: >-
+          bats --tap ../consumer-private/.github/standard/tests/
+          | tee "$RUNNER_TEMP/consumer-private.tap"
       - name: No test failed or skipped
         run: >-
           .github/standard/bin/no-skips "$RUNNER_TEMP/standard.tap" "$RUNNER_TEMP/tools.tap"
-          "$RUNNER_TEMP/consumer.tap"
+          "$RUNNER_TEMP/consumer-public.tap" "$RUNNER_TEMP/consumer-private.tap"
       - name: The privacy rules over the tree
         run: sh .githooks/privacy-scan --tracked
       - name: The MANIFEST matches the tree
@@ -61,13 +71,19 @@ jobs:
         run: bats --tap --filter-tags '!lint' .github/standard/tests/ | tee "$RUNNER_TEMP/standard.tap"
       - name: The tests of tools/ in Git Bash, lint aside
         run: bats --tap --filter-tags '!lint' tests/ | tee "$RUNNER_TEMP/tools.tap"
-      - name: A scratch consumer with only what the MANIFEST vendors
-        run: sh tools/consumer-suite ../consumer
-      - name: The standard's suites in the scratch consumer, in Git Bash, lint aside
+      - name: Two scratch consumers with only what the MANIFEST vendors, one per shape
+        run: |
+          sh tools/consumer-suite --shape public ../consumer-public
+          sh tools/consumer-suite --shape private ../consumer-private
+      - name: The standard's suites in the public consumer, in Git Bash, lint aside
         run: >-
-          bats --tap --filter-tags '!lint' ../consumer/.github/standard/tests/
-          | tee "$RUNNER_TEMP/consumer.tap"
+          bats --tap --filter-tags '!lint' ../consumer-public/.github/standard/tests/
+          | tee "$RUNNER_TEMP/consumer-public.tap"
+      - name: The standard's suites in the private consumer, in Git Bash, lint aside
+        run: >-
+          bats --tap --filter-tags '!lint' ../consumer-private/.github/standard/tests/
+          | tee "$RUNNER_TEMP/consumer-private.tap"
       - name: No test failed or skipped
         run: >-
           .github/standard/bin/no-skips "$RUNNER_TEMP/standard.tap" "$RUNNER_TEMP/tools.tap"
-          "$RUNNER_TEMP/consumer.tap"
+          "$RUNNER_TEMP/consumer-public.tap" "$RUNNER_TEMP/consumer-private.tap"

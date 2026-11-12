@@ -75,6 +75,10 @@ printf '%s\n' "$version" | grep -q -x -E '[0-9]+\.[0-9]+\.[0-9]+(-dev)?' ||
         }
         {
             split($1, m, " "); mode = m[1]; oid = m[2]; path = $2
+            # A MANIFEST line splits at blanks, so a vendored path holding one could not be read.
+            if ((path ~ /^blocks\// || path ~ /^\.githooks\// || path ~ /^\.github\//) && path ~ /[ \t]/) {
+                print "manifest: " path ": a vendored path holds a blank" > "/dev/stderr"; bad = 1; next
+            }
             if (path ~ /^blocks\//) {
                 rel = substr(path, 8)
                 n = split(rel, part, "/")

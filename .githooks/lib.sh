@@ -155,6 +155,20 @@ guard_vendored_staged() {
         $0 in listed || /^\.githooks\// || /^\.github\/standard\// || /^\.github\/workflows\// ||
             $0 == ".github/standard.conf" { found = 1 }
         END { exit !found }' "$std_tmp/staged" || return 0
+    # standard-check names the paths of the standard's folders that the index holds, also those
+    # a commit made with the hooks off brought in. Their names go through the scan first, so that
+    # nothing shows a name that holds a finding.
+    git -c core.quotePath=false ls-files -- .githooks .github/standard .github/workflows \
+        > "$std_tmp/guard.names" || std_fail "cannot list the standard's folders"
+    if [ -s "$std_tmp/guard.names" ]; then
+        sh "$std_here/privacy-scan" --message "$std_tmp/guard.names" < /dev/null || {
+            std_status=$?
+            [ "$std_status" -ne 1 ] || std_say "a path name in .githooks/, .github/standard/ or" \
+                ".github/workflows/ holds a finding (line N of git ls-files on those folders);" \
+                "rename it before the copy guard can run."
+            exit "$std_status"
+        }
+    fi
     sh "$std_here/../.github/standard/bin/standard-check" --staged || exit 1
 }
 
@@ -285,12 +299,15 @@ deny_load() {
         *) std_fail "cannot read a denylist" ;;
     esac
     std_bom=$(printf '\357\273\277')
+    std_fw=$(printf '\357\274\240')
     # One pass over every list: drop a BOM, the whitespace around each term, and blank and #
-    # lines, and count the terms of each list.
-    LC_ALL=C awk -v bom="$std_bom" -v terms="$std_tmp/terms" '
+    # lines, and count the terms of each list. A fullwidth at sign (U+FF20) reads as @, as it
+    # does in the scanned text.
+    LC_ALL=C awk -v bom="$std_bom" -v fw="$std_fw" -v terms="$std_tmp/terms" '
         {
             line = $0
             if (index(line, bom) == 1) line = substr(line, 4)
+            gsub(fw, "@", line)
             sub(/^[[:space:]]+/, "", line)
             sub(/[[:space:]]+$/, "", line)
             if (line == "" || substr(line, 1, 1) == "#") next

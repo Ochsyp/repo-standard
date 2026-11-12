@@ -260,4 +260,9 @@ MAX_BLOB_KB=1024" ]
     run_conf --check "$FILE"
     [ "$status" -eq 1 ]
     [[ $stderr == *"the path ERE holds a value a rule pack matches"* ]]
+    # A synthetic value that the rule's own exempt ERE covers passes, as it does in a scan.
+    write_config "$(printf 'PRIVACY_ALLOW=home-path ^tests/fixtures/%s-5ca1-4000-8000-%s0001/ ^/%s/example-user$' \
+        5ca1ab1e 5ca1ab1e home)"
+    run_conf --check "$FILE"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
 }
