@@ -1,0 +1,57 @@
+# Temporary CI of repo-standard's phase 1. Phase 2 removes it and brings the standard's own
+# workflows. It runs the standard's suites and the tests of tools/ on Linux, and in Git Bash on
+# Windows, with bats pinned through install-tools, so phase 1 does not merge untested; on Linux
+# it also runs the lint suite, the privacy rules over the tree and the MANIFEST check.
+name: bootstrap
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned bats and ShellCheck
+        run: .github/standard/bin/install-tools bats shellcheck
+      - name: The standard's suites, lint included
+        run: bats --tap .github/standard/tests/ | tee "$RUNNER_TEMP/standard.tap"
+      - name: The tests of tools/
+        run: bats --tap tests/ | tee "$RUNNER_TEMP/tools.tap"
+      - name: No test failed or skipped
+        run: .github/standard/bin/no-skips "$RUNNER_TEMP/standard.tap" "$RUNNER_TEMP/tools.tap"
+      - name: The privacy rules over the tree
+        run: sh .githooks/privacy-scan --tracked
+      - name: The MANIFEST matches the tree
+        run: sh tools/manifest --check --rev HEAD
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned bats
+        run: .github/standard/bin/install-tools bats
+      - name: The standard's suites in Git Bash, lint aside
+        run: bats --tap --filter-tags '!lint' .github/standard/tests/ | tee "$RUNNER_TEMP/standard.tap"
+      - name: The tests of tools/ in Git Bash, lint aside
+        run: bats --tap --filter-tags '!lint' tests/ | tee "$RUNNER_TEMP/tools.tap"
+      - name: No test failed or skipped
+        run: .github/standard/bin/no-skips "$RUNNER_TEMP/standard.tap" "$RUNNER_TEMP/tools.tap"

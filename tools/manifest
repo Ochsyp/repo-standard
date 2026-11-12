@@ -1,0 +1,132 @@
+#!/bin/sh
+# tools/manifest of repo-standard: writes .github/standard/MANIFEST from the canonical files and
+# the bodies in blocks/ (the standard, section 2.5). It runs here only; it is not vendored.
+#   tools/manifest [--rev REV]          write .github/standard/MANIFEST to the work tree
+#   tools/manifest --print [--rev REV]  print it instead
+#   tools/manifest --check [--rev REV]  exit 1 when the MANIFEST there differs from a rebuilt one
+# It reads the index, or the commit REV. Each hash is a git blob id, so it covers the normalised
+# content git stores, the same on every OS. A block's hash is the blob id of its body,
+# blocks/<file>/<name>[@<variant>][.md|.yml], which sync writes between the block's markers.
+# In <file>, a hidden name's leading dot is written as _ (blocks/_github/dependabot.yml/...):
+# git refuses a folder named .gitattributes.
+# Profiles: all; mit (LICENSE=MIT); release (the release workflows and the releasing block); a
+# block variant (public, private, seal) is its own profile.
+set -eu
+
+usage() {
+    echo "usage: tools/manifest [--print | --check] [--rev REV]" >&2
+    exit 64
+}
+
+action="write"
+rev=
+while [ "$#" -gt 0 ]; do
+    case $1 in
+        --print) action=print ;;
+        --check) action=check ;;
+        --rev)
+            [ "$#" -ge 2 ] || usage
+            rev=$2
+            shift
+            ;;
+        *) usage ;;
+    esac
+    shift
+done
+
+top=$(git rev-parse --show-toplevel 2> /dev/null) || {
+    echo "manifest: not in a git work tree" >&2
+    exit 2
+}
+cd "$top"
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/manifest.XXXXXX") || exit 2
+trap 'rm -rf -- "$tmp"' EXIT
+
+fail() {
+    printf 'manifest: %s\n' "$1" >&2
+    exit 2
+}
+
+# The listing, as "mode oid TAB path" lines.
+if [ -n "$rev" ]; then
+    oid=$(git rev-parse --verify --quiet "$rev^{commit}") || fail "no commit $rev"
+    git -c core.quotePath=false ls-tree -r "$oid" > "$tmp/ls" || fail "cannot list $rev"
+    awk -F '\t' '{ split($1, m, " "); print m[1] " " m[3] "\t" $2 }' "$tmp/ls" > "$tmp/tree"
+else
+    git -c core.quotePath=false ls-files -s > "$tmp/ls" || fail "cannot list the index"
+    awk -F '\t' '{ split($1, m, " "); if (m[3] == "0") print m[1] " " m[2] "\t" $2 }' "$tmp/ls" \
+        > "$tmp/tree"
+fi
+
+vo=$(awk -F '\t' '$2 == "VERSION" { split($1, m, " "); print m[2] }' "$tmp/tree")
+[ -n "$vo" ] || fail "VERSION is missing"
+version=$(git cat-file blob "$vo") || fail "cannot read VERSION"
+printf '%s\n' "$version" | grep -q -x -E '[0-9]+\.[0-9]+\.[0-9]+(-dev)?' ||
+    fail "VERSION is not X.Y.Z or X.Y.Z-dev"
+
+{
+    printf '# Repository standard %s. Written by tools/manifest; never edit it.\n' "$version"
+    printf '# type  profile  blob-id                                   mode    path[#block[@variant]]\n'
+    printf 'standard %s\n' "$version"
+    LC_ALL=C awk -F '\t' '
+        function entry(type, profile, oid, mode, path) {
+            printf "%-7s %-8s %s  %-7s %s\n", type, profile, oid, mode, path
+        }
+        {
+            split($1, m, " "); mode = m[1]; oid = m[2]; path = $2
+            if (path ~ /^blocks\//) {
+                rel = substr(path, 8)
+                n = split(rel, part, "/")
+                if (n < 2) { print "manifest: " path ": a block body sits in blocks/<file>/" > "/dev/stderr"; bad = 1; next }
+                target = ""
+                for (j = 1; j < n; j++) {
+                    c = part[j]
+                    if (substr(c, 1, 1) == "_") c = "." substr(c, 2)
+                    target = target (j > 1 ? "/" : "") c
+                }
+                base = part[n]
+                if (target ~ /\.md$/ && base ~ /\.md$/) base = substr(base, 1, length(base) - 3)
+                else if (target ~ /\.ya?ml$/ && base ~ /\.yml$/) base = substr(base, 1, length(base) - 4)
+                name = base; variant = ""
+                if (index(base, "@")) { name = substr(base, 1, index(base, "@") - 1); variant = substr(base, index(base, "@") + 1) }
+                if (name !~ /^[a-z0-9-]+$/ || (variant != "" && variant !~ /^(public|private|seal)$/)) {
+                    print "manifest: " path ": not blocks/<file>/<name>[@public|@private|@seal]" > "/dev/stderr"; bad = 1; next
+                }
+                profile = (variant != "") ? variant : (name == "releasing") ? "release" : "all"
+                blocks[++nb] = sprintf("%s\t%s\t%s", target "#" base, profile, oid)
+                next
+            }
+            profile = ""
+            if (path ~ /^\.githooks\//) profile = "all"
+            else if (path ~ /^\.github\/standard\// && path != ".github/standard/MANIFEST") profile = "all"
+            else if (path ~ /^\.github\/workflows\/(ci|secret-scan)\.yml$/) profile = "all"
+            else if (path ~ /^\.github\/workflows\/(release|image)\.yml$/) profile = "release"
+            else if (path == ".github/pull_request_template.md" || path == ".shellcheckrc") profile = "all"
+            else if (path == "LICENSE") profile = "mit"
+            if (profile == "") next
+            if (mode != "100644" && mode != "100755") { print "manifest: " path ": mode " mode " cannot be vendored" > "/dev/stderr"; bad = 1; next }
+            entry("file", profile, oid, mode, path)
+        }
+        END {
+            for (i = 1; i <= nb; i++) {
+                split(blocks[i], b, "\t")
+                entry("block", b[2], b[3], "-", b[1])
+            }
+            exit bad
+        }' "$tmp/tree" > "$tmp/unsorted" || fail "cannot list the entries"
+    LC_ALL=C sort -k 1,1r -k 5,5 "$tmp/unsorted" || fail "cannot sort the entries"
+} > "$tmp/manifest"
+
+case $action in
+    print) cat "$tmp/manifest" ;;
+    write) cp "$tmp/manifest" .github/standard/MANIFEST || fail "cannot write .github/standard/MANIFEST" ;;
+    check)
+        mo=$(awk -F '\t' '$2 == ".github/standard/MANIFEST" { split($1, m, " "); print m[2] }' "$tmp/tree")
+        [ -n "$mo" ] || { echo "manifest: .github/standard/MANIFEST is missing" >&2; exit 1; }
+        git cat-file blob "$mo" > "$tmp/committed" || fail "cannot read the MANIFEST"
+        cmp -s "$tmp/manifest" "$tmp/committed" || {
+            echo "manifest: .github/standard/MANIFEST differs from the files; run tools/manifest" >&2
+            exit 1
+        }
+        ;;
+esac

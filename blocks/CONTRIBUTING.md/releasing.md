@@ -1,0 +1,25 @@
+## Releasing
+
+GitHub Actions builds each release, and the maintainer publishes it in the browser.
+
+1. A session opens the release pull request `chore/release-X.Y.Z`, written with
+   `.github/standard/bin/release-prepare`: `VERSION`, the `VERSION_COPY` files, and the
+   `CHANGELOG.md` section with its links. Its body names the dependency updates since the last
+   release. CI checks the version, the date and the links, and the `release` workflow builds the
+   release twice to compare.
+2. The maintainer reviews and squash-merges it. The push to `main` that changes `VERSION` runs
+   the `release` workflow: the checks of `ci` on that commit, the build, an attestation in the
+   public repositories, and a draft release `vX.Y.Z` of that commit.
+3. The maintainer checks the draft (notes, assets, target commit, image digest) and clicks
+   **Publish release**. GitHub creates the tag and the immutable release. The `verify` job then
+   checks the published release: look for it to pass.
+4. To fix a draft, merge a pull request from `fix/release-X.Y.Z-<slug>`, whose `CHANGELOG.md`
+   line goes into `## [X.Y.Z]`, then run the `release` workflow on `main` (Actions, release, Run
+   workflow). Merge nothing else until the draft is published: CI says so on every pull request
+   while a release waits.
+5. Never delete a published release. Tick **Set as a pre-release** on a bad one, which clients
+   and updaters then ignore, and ship X.Y.Z+1. For a container image, that edit also moves
+   `latest` back.
+
+Sessions prepare release pull requests. They never create a tag, and never publish, edit or
+delete a release.

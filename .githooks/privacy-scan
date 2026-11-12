@@ -1,0 +1,60 @@
+#!/bin/sh
+# privacy-scan of the repository standard: the same file in every repository; never edit it
+# here. One command for the hooks, the tests and CI:
+#   --staged          the staged content and path names, the author and committer identity, and
+#                     the line endings the index records for the staged paths
+#   --tracked         the content, path name and line endings of every tracked file
+#   --message FILE|-  a commit message, a list of ref names, or a pull request's title and body
+#   --range REVS...   what the commits of REVS (git rev-list arguments) bring in: content, path
+#                     names, messages, author and committer, and annotated tag messages
+#   --history         --range over every ref, with the PRIVACY_HISTORY_ACCEPT records applied
+# It always checks the terms of every denylist (.githooks/lib.sh, deny_load), and the rule packs
+# that PRIVACY_RULES names, read from the committed .github/standard.conf with its PRIVACY_ALLOW
+# exemptions. The packs skip the PRIVACY_ALLOW lines of .github/standard.conf, each of which
+# names the synthetic value it exempts and which conf has checked; the denylist does not skip
+# them. It prints "privacy-scan: WHERE: KIND" per finding and never a matched value.
+# Exit 0 clean, 1 findings, 2 a check that cannot run (fail closed), 64 usage.
+set -eu
+
+std_hook=privacy-scan
+std_here=$(dirname -- "$0")
+# shellcheck source=.githooks/lib.sh
+. "$std_here/lib.sh"
+
+usage() {
+    echo "usage: privacy-scan --staged | --tracked | --message FILE|- | --range REVS... | --history" >&2
+    exit 64
+}
+
+[ "$#" -ge 1 ] || usage
+mode=$1
+shift
+case $mode in
+    --staged | --tracked | --history) [ "$#" -eq 0 ] || usage ;;
+    --message) [ "$#" -eq 1 ] || usage ;;
+    --range) [ "$#" -ge 1 ] || usage ;;
+    *) usage ;;
+esac
+
+std_load_config
+deny_load
+deny_enforce
+scan_begin
+case $mode in
+    --staged) scan_staged ;;
+    --tracked) scan_tracked ;;
+    --message)
+        if [ "$1" = - ]; then
+            cat > "$std_tmp/message" || std_fail "cannot read the message from stdin"
+            set -- "$std_tmp/message"
+        fi
+        [ -f "$1" ] && [ -r "$1" ] || std_fail "the message file cannot be read"
+        scan_add_file message "$1"
+        ;;
+    --range) scan_range "$@" ;;
+    --history)
+        scan_range --all
+        scan_accept
+        ;;
+esac
+scan_run || exit 1

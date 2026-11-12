@@ -1,0 +1,23 @@
+#!/bin/sh
+# pre-commit of the repository standard: the same file in every repository; never edit it here.
+# Refuses a commit while main or master is checked out, a staged copy of the standard that
+# differs from .github/standard/MANIFEST, a staged blob above MAX_BLOB_KB, and staged content,
+# path names or identities that privacy-scan refuses. Reads the config from HEAD. Never prints a
+# matched value. A commit in a detached HEAD is scanned too.
+set -eu
+
+std_hook=pre-commit
+std_here=$(dirname -- "$0")
+# shellcheck source=.githooks/lib.sh
+. "$std_here/lib.sh"
+
+# The full ref name: a tag named main, for example, turns the short name into heads/main.
+ref=$(git symbolic-ref --quiet HEAD) || ref=
+case $ref in
+    refs/heads/main | refs/heads/master) refuse_branch "${ref#refs/heads/}" ;;
+esac
+std_load_config
+guard_vendored_staged
+guard_blob_size_staged
+std_cleanup
+exec sh "$std_here/privacy-scan" --staged

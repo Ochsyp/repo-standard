@@ -1,0 +1,10 @@
+#!/bin/sh
+# ci/test of repo-standard: the bats tests of tools/ in tests/, then no-skips. The test stage of
+# CI runs it on Linux; on Windows, run single files instead (bats tests/manifest.bats).
+set -eu
+tap=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/repo-standard-tests.tap
+status=0
+bats --tap tests/ > "$tap" || status=$?
+cat "$tap"
+[ "$status" -eq 0 ] || exit "$status"
+sh .github/standard/bin/no-skips "$tap"

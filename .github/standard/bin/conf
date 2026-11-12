@@ -1,0 +1,280 @@
+#!/bin/sh
+# conf of the repository standard: the same file in every repository; never edit it here.
+# The one reader of .github/standard.conf, which is data: nothing sources it. It checks each
+# line against the keys and value forms of the standard and prints the values, with the
+# defaults filled in, for the hooks and the tools. POSIX sh and awk, so the hooks can run it
+# under dash.
+#   conf --check [FILE|-]     exit 0 when FILE parses
+#   conf --get KEY [FILE|-]   print KEY's value or its default; a repeatable key one per line
+#   conf --print [FILE|-]     print every key as KEY=value, with the defaults filled in
+#   conf --defaults           print the defaults, for a repository without the file
+# FILE defaults to .github/standard.conf. Exit 0; 1 when the file does not parse, each problem on
+# stderr as "conf: line N: ..."; 2 when a check cannot run; 64 usage. A message never shows a
+# value from the file.
+set -eu
+
+# The keys, in the order --print prints them.
+keys="NAME VISIBILITY ROLE LICENSE CI_RUNNER CI_STAGES CI_WEEKLY PYTHON PS_MODULES \
+IMAGE_PLATFORMS RELEASE_KIND RELEASE_RUNNER RELEASE_MANIFEST RELEASE_ASSETS VERSION_COPY \
+PRIVACY_RULES PRIVACY_ALLOW PRIVACY_HISTORY_ACCEPT MAX_BLOB_KB"
+
+usage() {
+    echo "usage: conf --check [FILE|-] | --get KEY [FILE|-] | --print [FILE|-] | --defaults" >&2
+    exit 64
+}
+
+fail() {
+    printf 'conf: %s\n' "$1" >&2
+    exit 2
+}
+
+# Realistic values of each kind, built from fragments so that this file passes every rule pack.
+# A PRIVACY_ALLOW value ERE that matches one of them is too broad: exemptions are for synthetic
+# values only, such as a distribution's default user home.
+samples() {
+    case $1 in
+        ipv4-private) printf '%s.%s.%s.%s\n' 192 168 1 20 10 0 0 7 172 16 5 4 100 64 1 2 ;;
+        ipv6-private) printf '%s:%s::%s\n' fd12 3456 1 fe80 1c2b 5e6f ;;
+        host-name)
+            printf '%s.%s\n' nas lan printer home.arpa raspberrypi local server internal
+            printf '%s.%s.%s.%s\n' laptop tail1234 ts net
+            ;;
+        mac-address)
+            printf '%s:%s:%s:%s:%s:%s\n' 3c 22 fb 12 34 56
+            printf '%s-%s-%s-%s-%s-%s\n' B8 27 EB 12 34 56
+            ;;
+        home-path)
+            printf '/%s/%s\n' home alice Users bob
+            printf '%s:\\%s\\%s\n' C Users carol
+            printf '%s:/%s/%s\n' C Users dave
+            printf '/%s/%s/%s\n' c Users erin
+            ;;
+        e-mail) printf '%s@%s.%s\n' alice gmail com bob.smith outlook com ;;
+        uuid)
+            printf '%s-%s-%s-%s-%s\n' d00dfeed cafe 4abc 8def 0123456789ab
+            printf '%s-%s-%s-%s-%s\n' 123e4567 e89b 12d3 a456 426614174000
+            ;;
+        uuid-dashless) printf '%s%s%s%s\n' d00dfeed cafe4abc 8def0123 456789ab ;;
+        ntfs-serial) printf '%s%s\n' D00DFEED CAFEF00D ;;
+        fat-serial)
+            printf '%s="%s-%s\n' UUID 1A2B 3C4D
+            printf '%s --set=root %s-%s\n' --fs-uuid 1a2b 3c4d
+            ;;
+        lvm-uuid) printf '%s-%s-%s-%s-%s-%s-%s\n' Ab12Cd 3456 7890 abcd EfGh 1234 Zz99Yy ;;
+        partuuid) printf '%sUUID="%s\n' PART d00dfeed PT 0a1b2c3d ;;
+        disk-by-id)
+            printf '/dev/disk/%s/%s-%s_%s%s-%s\n' by-id usb SanDisk_Cruzer 4C5300 01230456 0:0
+            printf '/dev/disk/%s/%s-%s_%s%s-%s\n' by-id ata Samsung_SSD S3Z1NB0K 123456X part1
+            ;;
+        vmware-uuid)
+            printf '%s %s %s %s %s %s %s %s-%s %s %s %s %s %s %s %s\n' \
+                56 4d 12 34 56 78 9a bc de f0 12 34 56 78 9a bc
+            ;;
+        vbox-mac) printf '%s="%s\n' MACAddress 080027AB12CD ;;
+    esac
+}
+
+[ "$#" -ge 1 ] || usage
+mode=$1
+shift
+key=
+case $mode in
+    --check | --print) [ "$#" -le 1 ] || usage ;;
+    --get)
+        [ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage
+        key=$1
+        shift
+        case " $keys " in
+            *" $key "*) ;;
+            *) usage ;;
+        esac
+        ;;
+    --defaults) [ "$#" -eq 0 ] || usage ;;
+    *) usage ;;
+esac
+file=${1:-.github/standard.conf}
+here=$(dirname -- "$0")
+us=$(printf '\037')
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/conf.XXXXXX" 2> /dev/null) || fail "cannot create a temp folder"
+trap 'rm -rf -- "$tmp"' EXIT
+trap 'exit 2' HUP INT TERM
+
+: > "$tmp/values"
+status=0
+if [ "$mode" != --defaults ]; then
+    if [ "$file" = - ]; then
+        cat > "$tmp/in" || fail "cannot read the config from stdin"
+    else
+        [ -f "$file" ] && [ -r "$file" ] || fail "the config file cannot be read"
+        cat -- "$file" > "$tmp/in" || fail "the config file cannot be read"
+    fi
+    # The packs and their kinds, from the rule files the hooks use.
+    rules="$here/../../../.githooks/rules"
+    [ -d "$rules" ] || fail "the rule packs (.githooks/rules) are missing"
+    LC_ALL=C awk -F '|' '
+        /^[ \t]*(#|$)/ { next }
+        { n = split(FILENAME, p, "/"); print p[n], $1 }' "$rules"/* > "$tmp/kinds" ||
+        fail "cannot read the rule packs"
+    [ -s "$tmp/kinds" ] || fail "the rule packs hold no rule"
+    # BINMODE=3 keeps gawk on Windows from dropping the CR of a CRLF line; other awks ignore it.
+    LC_ALL=C awk -v BINMODE=3 -v us="$us" -v keys="$keys" '
+        function problem(msg) {
+            printf "conf: line %d: %s\n", FNR, msg > "/dev/stderr"
+            bad = 1
+        }
+        # True when v lists words of the set allowed, each once, separated by single spaces.
+        function words(v, allowed,    n, w, i, seen) {
+            if (v == "") return 1
+            if (v ~ /^ / || v ~ / $/ || v ~ /  /) return 0
+            n = split(v, w, " ")
+            for (i = 1; i <= n; i++) {
+                if (index(" " allowed " ", " " w[i] " ") == 0 || (w[i] in seen)) return 0
+                seen[w[i]] = 1
+            }
+            return 1
+        }
+        # True for a relative path without . or .. segments.
+        function relpath(p) {
+            return p ~ /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/ && p !~ /(^|\/)\.\.?(\/|$)/
+        }
+        function paths(v,    n, w, i, seen) {
+            if (v == "") return 1
+            if (v ~ /^ / || v ~ / $/ || v ~ /  /) return 0
+            n = split(v, w, " ")
+            for (i = 1; i <= n; i++) {
+                if (!relpath(w[i]) || (w[i] in seen)) return 0
+                seen[w[i]] = 1
+            }
+            return 1
+        }
+        BEGIN {
+            n = split(keys, list, " ")
+            for (i = 1; i <= n; i++) known[list[i]] = 1
+            repeat["VERSION_COPY"] = repeat["PRIVACY_ALLOW"] = repeat["PRIVACY_HISTORY_ACCEPT"] = 1
+            form["NAME"] = "lower-case letters, digits and -"
+            form["VISIBILITY"] = "public or private"
+            form["ROLE"] = "consumer or source"
+            form["LICENSE"] = "MIT or none"
+            form["CI_RUNNER"] = form["RELEASE_RUNNER"] = "ubuntu or windows"
+            form["CI_STAGES"] = "lint, test or system, each once"
+            form["CI_WEEKLY"] = "yes or no"
+            form["PYTHON"] = "3.N or empty"
+            form["PS_MODULES"] = "pester or psscriptanalyzer, each once, or empty"
+            form["IMAGE_PLATFORMS"] = "linux/amd64 or linux/arm64, each once, or empty"
+            form["RELEASE_KIND"] = "zip, tar, stack, image or legacy"
+            form["RELEASE_MANIFEST"] = "a file name"
+            form["RELEASE_ASSETS"] = "relative paths, each once"
+            form["VERSION_COPY"] = "a relative path, |, and a line that holds X.Y.Z once"
+            form["PRIVACY_RULES"] = "rule packs, each once"
+            form["PRIVACY_ALLOW"] = "KIND PATH-ERE VALUE-ERE: a rule kind (never denylist), and a value ERE anchored with ^ and $"
+            form["PRIVACY_HISTORY_ACCEPT"] = "a full commit SHA and a rule kind (never denylist)"
+            form["MAX_BLOB_KB"] = "a whole number from 1 to 9999999"
+            ctrl = sprintf("%c", 31)
+        }
+        NR == FNR { packs = packs " " $1; kinds[$2] = 1; next }
+        {
+            if ($0 ~ /\r$/) { problem("ends with a CR: save the file with LF line ends"); next }
+            if ($0 == "" || $0 ~ /^#/) next
+            eq = index($0, "=")
+            k = substr($0, 1, eq - 1)
+            v = substr($0, eq + 1)
+            if (eq < 2 || k !~ /^[A-Z_]+$/) { problem("not a KEY=value line"); next }
+            if (!(k in known)) { problem("the key " k " is unknown"); next }
+            if ((k in seen) && !(k in repeat)) { problem(k " is set twice"); next }
+            seen[k] = 1
+            if (index(v, "\t") || index(v, ctrl) || v ~ / $/) {
+                problem(k ": the value ends with a space or holds a tab or a control character")
+                next
+            }
+            if (k == "NAME") ok = v ~ /^[a-z0-9][a-z0-9-]*$/
+            else if (k == "VISIBILITY") ok = v == "public" || v == "private"
+            else if (k == "ROLE") ok = v == "consumer" || v == "source"
+            else if (k == "LICENSE") ok = v == "MIT" || v == "none"
+            else if (k == "CI_RUNNER" || k == "RELEASE_RUNNER") ok = v == "ubuntu" || v == "windows"
+            else if (k == "CI_STAGES") ok = words(v, "lint test system")
+            else if (k == "CI_WEEKLY") ok = v == "yes" || v == "no"
+            else if (k == "PYTHON") ok = v == "" || v ~ /^3\.[0-9]+$/
+            else if (k == "PS_MODULES") ok = words(v, "pester psscriptanalyzer")
+            else if (k == "IMAGE_PLATFORMS") ok = words(v, "linux/amd64 linux/arm64")
+            else if (k == "RELEASE_KIND") ok = words(v, "zip tar stack image legacy") && v != "" && v !~ / /
+            else if (k == "RELEASE_MANIFEST") ok = v ~ /^[A-Za-z0-9._-]+$/ && v != "." && v != ".."
+            else if (k == "RELEASE_ASSETS") ok = paths(v)
+            else if (k == "VERSION_COPY") {
+                p = index(v, "|"); line = substr(v, p + 1)
+                ok = p > 1 && relpath(substr(v, 1, p - 1)) && index(line, "X.Y.Z") > 0 &&
+                    index(substr(line, index(line, "X.Y.Z") + 5), "X.Y.Z") == 0
+            } else if (k == "PRIVACY_RULES") ok = words(v, packs)
+            else if (k == "PRIVACY_ALLOW") {
+                a = index(v, " "); kind = substr(v, 1, a - 1); rest = substr(v, a + 1)
+                b = index(rest, " "); value = substr(rest, b + 1)
+                ok = a > 1 && b > 1 && (kind in kinds) && kind != "denylist" && value != "" &&
+                    substr(value, 1, 1) == "^" && value ~ /\$$/ && value !~ /\\\$$/
+            } else if (k == "PRIVACY_HISTORY_ACCEPT") {
+                c = split(v, w, " ")
+                ok = c == 2 && w[1] ~ /^[0-9a-f]+$/ && (length(w[1]) == 40 || length(w[1]) == 64) &&
+                    (w[2] in kinds) && w[2] != "denylist" && v !~ /  /
+            } else if (k == "MAX_BLOB_KB") ok = v ~ /^[1-9][0-9]*$/ && length(v) <= 7
+            if (!ok) { problem(k ": expected " form[k]); next }
+            print FNR us k us v
+        }
+        END {
+            if (!("NAME" in seen)) { print "conf: NAME is required" > "/dev/stderr"; bad = 1 }
+            if (!("VISIBILITY" in seen)) { print "conf: VISIBILITY is required" > "/dev/stderr"; bad = 1 }
+            if (!("RELEASE_KIND" in seen)) { print "conf: RELEASE_KIND is required" > "/dev/stderr"; bad = 1 }
+            exit bad
+        }' "$tmp/kinds" "$tmp/in" > "$tmp/values" || status=$?
+    [ "$status" -le 1 ] || fail "cannot parse the config"
+    # Each PRIVACY_ALLOW ERE must compile, and the value ERE may match no realistic sample.
+    while IFS=$us read -r line k v; do
+        [ "$k" = PRIVACY_ALLOW ] || continue
+        akind=${v%% *}
+        rest=${v#* }
+        apath=${rest%% *}
+        avalue=${rest#* }
+        for ere in "$apath" "$avalue"; do
+            st=0
+            grep -E -e "$ere" /dev/null > /dev/null 2>&1 || st=$?
+            if [ "$st" -ne 1 ]; then
+                printf 'conf: line %s: PRIVACY_ALLOW: an ERE does not compile\n' "$line" >&2
+                status=1
+                continue 2
+            fi
+        done
+        samples "$akind" > "$tmp/samples"
+        if LC_ALL=C.UTF-8 grep -q -i -E -e "$avalue" "$tmp/samples"; then
+            printf 'conf: line %s: PRIVACY_ALLOW: the value ERE matches a realistic %s;' \
+                "$line" "$akind" >&2
+            printf ' exempt synthetic values only\n' >&2
+            status=1
+        fi
+    done < "$tmp/values"
+    [ "$status" -eq 0 ] || exit 1
+fi
+[ "$mode" != --check ] || exit 0
+
+LC_ALL=C awk -F "$us" -v keys="$keys" -v want="$key" '
+    BEGIN {
+        n = split(keys, order, /[ \n]+/)
+        repeat["VERSION_COPY"] = repeat["PRIVACY_ALLOW"] = repeat["PRIVACY_HISTORY_ACCEPT"] = 1
+        d["ROLE"] = "consumer"; d["LICENSE"] = "MIT"; d["CI_RUNNER"] = "ubuntu"
+        d["CI_STAGES"] = "test"; d["CI_WEEKLY"] = "no"; d["RELEASE_RUNNER"] = "ubuntu"
+        d["MAX_BLOB_KB"] = "1024"
+    }
+    {
+        if ($2 in repeat) list[$2] = list[$2] (want == "" ? $2 "=" : "") $3 "\n"
+        else { val[$2] = $3; set[$2] = 1 }
+    }
+    END {
+        if (!("RELEASE_MANIFEST" in set) && val["NAME"] != "") {
+            val["RELEASE_MANIFEST"] = val["NAME"] "-release.json"
+            set["RELEASE_MANIFEST"] = 1
+        }
+        for (i = 1; i <= n; i++) {
+            k = order[i]
+            if (want != "" && k != want) continue
+            v = (k in set) ? val[k] : d[k]
+            if (k in repeat) printf "%s", list[k]
+            else if (want != "") print v
+            else print k "=" v
+        }
+    }' "$tmp/values" || fail "cannot print the config"

@@ -1,0 +1,7 @@
+#!/bin/sh
+# commit-msg of the repository standard: the same file in every repository; never edit it here.
+# Refuses a commit message that privacy-scan refuses: a denylist term or a rule pack hit. git
+# passes the message file as $1; when an editor wrote the message, the file still holds git's
+# comment lines, such as the branch name, and a hit there is refused too.
+set -eu
+exec sh "$(dirname -- "$0")/privacy-scan" --message "$1"
