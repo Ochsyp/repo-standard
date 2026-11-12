@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # manifest.bats of repo-standard: tools/manifest over a small source repository (profiles,
-# modes, block ids, what stays out, --check and --rev), over this repository, and lint of the
-# repository's own scripts in tools/ and ci/.
+# modes, block ids, what stays out, --check and --rev), over this repository, the scratch
+# consumer of tools/consumer-suite, and lint of the repository's own scripts in tools/, ci/ and
+# tests/.
 
 # The sh -c scripts are single-quoted, and bats runs each test in a subshell, both on purpose.
 # shellcheck disable=SC2016,SC2030,SC2031
@@ -30,6 +31,8 @@ make_source() {
     printf 'Report to the maintainer.\n' > "$REPO/blocks/SECURITY.md/reporting@private.md"
     printf 'Release in the browser.\n' > "$REPO/blocks/CONTRIBUTING.md/releasing.md"
     printf '* text=auto eol=lf\n' > "$REPO/blocks/_gitattributes/gitattributes"
+    mkdir -p "$REPO/blocks/_github/dependabot.yml"
+    printf 'version: 2\n' > "$REPO/blocks/_github/dependabot.yml/dependabot.yml"
     cp "$REPO_ROOT/tools/manifest" "$REPO/tools/manifest"
     git -C "$REPO" add -A
     stage_executables
@@ -62,6 +65,8 @@ has_entry() {
         'CONTRIBUTING.md#releasing'
     has_entry block all "$(git -C "$REPO" rev-parse :blocks/_gitattributes/gitattributes)" - \
         '.gitattributes#gitattributes'
+    has_entry block all "$(git -C "$REPO" rev-parse :blocks/_github/dependabot.yml/dependabot.yml)" - \
+        '.github/dependabot.yml#dependabot'
 }
 
 @test "tools/manifest leaves out the MANIFEST, bootstrap.yml and the repository's own files" {
@@ -117,9 +122,39 @@ has_entry() {
     [ "$status" -eq 0 ]
 }
 
+@test "tools/consumer-suite builds a consumer that holds only what the MANIFEST vendors" {
+    local dest="$BATS_TEST_TMPDIR/consumer" type oid mode path
+    run --separate-stderr sh -c 'cd "$1" && exec sh tools/consumer-suite "$2"' sh "$REPO_ROOT" "$dest"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $output == "consumer-suite: "*" file(s) and "*" block(s) of standard "* ]]
+    git -C "$dest" ls-files -s > "$BATS_TEST_TMPDIR/files"
+    # Each file entry with the blob and the mode the MANIFEST names.
+    while read -r type _ oid mode path; do
+        [[ $type == file ]] || continue
+        grep -q -x -F "$mode $oid 0"$'\t'"$path" "$BATS_TEST_TMPDIR/files" ||
+            { printf '%s is not %s %s in the consumer\n' "$path" "$mode" "$oid" >&2; return 1; }
+    done < "$REPO_ROOT/.github/standard/MANIFEST"
+    # Nothing that only repo-standard holds.
+    run grep -E -e $'\t(blocks|tools|tests)/' \
+        -e $'\t(VERSION|README\\.md|CHANGELOG\\.md|\\.github/workflows/bootstrap\\.yml)$' \
+        "$BATS_TEST_TMPDIR/files"
+    [ "$status" -eq 1 ]
+    # The blocks between their markers, ci/test executable, ci/test.ps1 checked out with CRLF.
+    [[ $(head -n 1 "$dest/.gitattributes") == "# standard:begin gitattributes" ]]
+    grep -q -x -F '<!-- standard:begin reporting -->' "$dest/SECURITY.md"
+    [[ $(git -C "$dest" ls-files -s -- ci/test) == 100755* ]]
+    [[ $(git -C "$dest" ls-files --eol -- ci/test.ps1) == i/lf*w/crlf* ]]
+    [ -z "$(git -C "$dest" remote)" ]
+    # A second run into the same folder is refused.
+    run --separate-stderr sh -c 'cd "$1" && exec sh tools/consumer-suite "$2"' sh "$REPO_ROOT" "$dest"
+    [ "$status" -eq 2 ]
+    [[ $stderr == *"is not empty"* ]]
+}
+
 # bats test_tags=lint
 @test "ShellCheck reports nothing in tools/, ci/ and tests/" {
     need command shellcheck
-    run_shellcheck tools/manifest ci/test tests/helpers.bash tests/manifest.bats
+    run_shellcheck tools/manifest tools/consumer-suite ci/test tests/helpers.bash \
+        tests/manifest.bats tests/source-check.bats
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
 }

@@ -125,6 +125,7 @@ synthetic() {
 
 @test "the synthetic and reserved values pass every pack" {
     make_repo
+    write_denylist
     git -C "$REPO" switch -q -c feat/example
     commit_config 'PRIVACY_RULES=base disk vm'
     synthetic > "$REPO/fixture.txt"
@@ -132,7 +133,9 @@ synthetic() {
     git -C "$REPO" add fixture.txt example-nas.lan.txt
     scan --staged
     [ "$status" -eq 0 ]
-    [ -z "$output" ]
+    # privacy-scan writes findings and notes to stderr only; with a denylist in place a clean
+    # scan prints nothing at all.
+    [ -z "$stderr" ]
 }
 
 @test "privacy-scan refuses a bad option or argument count with exit 64" {
@@ -155,9 +158,12 @@ synthetic() {
     [ "$status" -eq 0 ]
 }
 
-@test "the standard's own files pass every rule pack" {
+@test "the standard's copies pass every rule pack" {
     REPO="$BATS_TEST_TMPDIR/copy"
-    git -C "$REPO_ROOT" checkout-index -a --prefix="$REPO/"
+    # Only the copies, the MANIFEST's file entries: a repository's own files belong to its own
+    # --tracked scan, with its own packs and exemptions.
+    awk '$1 == "file" { print $5 }' "$REPO_ROOT/.github/standard/MANIFEST" |
+        git -C "$REPO_ROOT" checkout-index --prefix="$REPO/" --stdin
     git init -q -b main "$REPO"
     git -C "$REPO" config user.name "Test User"
     git -C "$REPO" config user.email test@example.invalid
@@ -307,4 +313,78 @@ synthetic() {
     [ "$status" -eq 1 ]
     [[ $stderr == *"copy.conf:5: home-path"* ]]
     [[ $stderr != *"standard.conf:5"* ]]
+}
+
+@test "an accepted PRIVACY_ALLOW line still reports hits of other kinds and in its path ERE" {
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    commit_config PRIVACY_RULES=base
+    write_config PRIVACY_RULES=base \
+        "$(printf 'PRIVACY_ALLOW=home-path ^tests/ ^(/%s/example-user|someone@%s)$' home example.de)"
+    git -C "$REPO" add .github/standard.conf
+    scan --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *".github/standard.conf:5: e-mail"* ]]
+    [[ $stderr != *"home-path"* ]]
+}
+
+@test "--history keeps reporting a later value at a path whose old finding is accepted" {
+    local sha
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    commit_config PRIVACY_RULES=base
+    stage hosts.txt "$(printf 'backup target: nas.%s' lan)"
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "docs: old hosts"
+    sha=$(git -C "$REPO" rev-parse HEAD)
+    commit_config PRIVACY_RULES=base "PRIVACY_HISTORY_ACCEPT=$sha host-name"
+    scan --history
+    [ "$status" -eq 0 ]
+    printf 'new target: printer.%s\n' lan >> "$REPO/hosts.txt"
+    git -C "$REPO" add hosts.txt
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "docs: new host"
+    scan --history
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"hosts.txt:2: host-name"* ]]
+}
+
+@test "a fullwidth at sign, a mixed fat-serial line and stdin are checked too" {
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    commit_config 'PRIVACY_RULES=base disk'
+    { printf 'mail someone\357\274\240%s\n' example.de
+      printf 'search --fs-uuid --set=root %s-%s || search --fs-uuid --set=root %s-%s\n' 5CA1 AB1E 1A2B 3C4D
+    } > "$REPO/notes.txt"
+    git -C "$REPO" add notes.txt
+    scan --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"notes.txt:1: e-mail"* ]]
+    [[ $stderr == *"notes.txt:2: fat-serial"* ]]
+    run --separate-stderr sh -c 'cd "$1" && printf "fix: seen at printer.%s\n" lan | sh .githooks/privacy-scan --message -' \
+        sh "$REPO"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"message line 1: host-name"* ]]
+}
+
+@test "privacy-scan run from a subdirectory scans the whole tree" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    stage top.txt "contact $DENY_TERM"
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "docs: notes"
+    mkdir -p "$REPO/docs"
+    run --separate-stderr sh -c 'cd "$1/docs" && exec sh ../.githooks/privacy-scan --tracked' sh "$REPO"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"top.txt:1: denylist"* ]]
+}
+
+@test "an object to scan that is missing fails closed with exit 2" {
+    local oid
+    make_repo
+    write_denylist
+    stage notes.txt 'synthetic notes'
+    oid=$(git -C "$REPO" rev-parse :notes.txt)
+    rm "$REPO/.git/objects/${oid:0:2}/${oid:2}"
+    scan --tracked
+    [ "$status" -eq 2 ]
+    [[ $stderr == *"an object to scan is missing"* ]]
 }

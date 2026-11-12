@@ -251,8 +251,13 @@ deny_load() {
         elif [ ! -f "$std_path" ] || [ ! -r "$std_path" ]; then
             std_fail "the denylist $std_label is not a readable file"
         else
-            set -- "$@" "$std_path"
-            printf '%s\n' "$std_label" >> "$std_tmp/deny.labels"
+            # A relative path gets ./, so that grep and awk below never read it as an option, as
+            # stdin (-) or, in awk, as an assignment (NAME=VALUE).
+            case $std_path in
+                /* | [A-Za-z]:*) set -- "$@" "$std_path" ;;
+                *) set -- "$@" "./$std_path" ;;
+            esac
+            printf '%s%s%s\n' "$std_flag" "$std_us" "$std_label" >> "$std_tmp/deny.labels"
         fi
     done < "$std_tmp/deny.kept"
     [ "$#" -gt 0 ] || return 0
@@ -267,6 +272,7 @@ deny_load() {
             n = $0
             sub(/.*:/, "", n)
             if ((getline label < labels) <= 0) { err = 1; exit }
+            label = substr(label, index(label, us) + 1)
             if (n + 0 > 1) { print "nul" us label >> notes; bad = 1 }
         }
         END { if (err) exit 1; exit bad ? 3 : 0 }' "$std_tmp/deny.nul" || std_status=$?
@@ -279,10 +285,33 @@ deny_load() {
         *) std_fail "cannot read a denylist" ;;
     esac
     std_bom=$(printf '\357\273\277')
-    LC_ALL=C sed -e "s/^$std_bom//" -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
-        -e '/^#/d' -e '/^$/d' "$@" > "$std_tmp/terms" 2> /dev/null ||
+    # One pass over every list: drop a BOM, the whitespace around each term, and blank and #
+    # lines, and count the terms of each list.
+    LC_ALL=C awk -v bom="$std_bom" -v terms="$std_tmp/terms" '
+        {
+            line = $0
+            if (index(line, bom) == 1) line = substr(line, 4)
+            sub(/^[[:space:]]+/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            if (line == "" || substr(line, 1, 1) == "#") next
+            print line > terms
+            n[FILENAME]++
+        }
+        END { for (i = 1; i < ARGC; i++) print n[ARGV[i]] + 0 }' "$@" > "$std_tmp/deny.counts" ||
         std_fail "cannot read a denylist"
-    deny_terms=$(awk 'END { print NR }' "$std_tmp/terms")
+    # A configured list without a term counts as missing, so that a list emptied by mistake does
+    # not pass unnoticed.
+    awk -v us="$std_us" -v labels="$std_tmp/deny.labels" -v notes="$std_tmp/deny.notes" '
+        {
+            if ((getline line < labels) <= 0) exit 1
+            i = index(line, us); flag = substr(line, 1, i - 1); label = substr(line, i + 1)
+            total += $1
+            if ($1 == 0 && flag == 1) { print "empty" us label >> notes; empty++ }
+        }
+        END { print total + 0, empty + 0 }' "$std_tmp/deny.counts" > "$std_tmp/deny.sum" ||
+        std_fail "cannot read a denylist"
+    read -r deny_terms std_empty < "$std_tmp/deny.sum"
+    deny_missing=$((deny_missing + std_empty))
 }
 
 # Print the loader's notes and decide: a list with NUL bytes always refuses; a configured list
@@ -295,6 +324,14 @@ deny_enforce() {
             nul)
                 std_say "the denylist $std_label holds NUL bytes: save it as UTF-8 text."
                 std_refuse=1
+                ;;
+            empty)
+                if [ "$deny_require" -eq 1 ]; then
+                    std_say "the denylist $std_label holds no term, and privacy.requireDenylist is true."
+                    std_refuse=1
+                else
+                    std_say "note: the denylist $std_label holds no term."
+                fi
                 ;;
             missing)
                 if [ "$deny_require" -eq 1 ]; then
@@ -391,7 +428,7 @@ scan_range() {
     git cat-file --batch-check='%(objecttype) %(objectname) %(rest)' < "$std_scan/revs" \
         > "$std_scan/types" || std_fail "cannot read the objects to scan"
     git -c core.quotePath=false log --format= --name-only --no-renames --diff-filter=ACMRT \
-        --diff-merges=first-parent "$@" > "$std_scan/lognames" 2> /dev/null ||
+        --root --no-show-signature --diff-merges=first-parent "$@" > "$std_scan/lognames" 2> /dev/null ||
         std_fail "cannot list the paths the commits add"
     awk -v us="$std_us" -v dir="$std_scan" '
         FILENAME ~ /\/lognames$/ {
@@ -480,10 +517,21 @@ scan_run() {
         printf '\n'
     } > "$std_scan/stream.raw" || std_fail "cannot build the scan"
     if [ -s "$std_scan/objs" ]; then
+        # A missing object (a partial clone that cannot fetch it) must not pass as clean.
+        git cat-file --batch-check="%(objectname) %(objecttype)" < "$std_scan/objs" \
+            > "$std_scan/objcheck" || std_fail "cannot read the objects to scan"
+        if grep -q " missing$" "$std_scan/objcheck"; then
+            std_fail "an object to scan is missing"
+        fi
         git cat-file --batch="$std_mark %(objectname)" < "$std_scan/objs" \
             >> "$std_scan/stream.raw" || std_fail "cannot read the objects to scan"
     fi
-    LC_ALL=C tr -d '\000' < "$std_scan/stream.raw" > "$std_scan/stream" ||
+    LC_ALL=C tr -d '\000' < "$std_scan/stream.raw" > "$std_scan/stream.nul" ||
+        std_fail "cannot build the scan"
+    # Messages between sessions turn each at sign into the fullwidth U+FF20: fold it back, so
+    # that the e-mail rule and denylist terms that hold an at sign still match.
+    std_fw=$(printf '\357\274\240')
+    LC_ALL=C sed "s/$std_fw/@/g" "$std_scan/stream.nul" > "$std_scan/stream" ||
         std_fail "cannot build the scan"
     rm -f -- "$std_scan/stream.raw"
     grep -n -a "^$std_mark " "$std_scan/stream" > "$std_scan/marks" ||
@@ -518,7 +566,7 @@ scan_run() {
             std_status=$?
         case $std_status in
             0)
-                awk -v us="$std_us" -v oid="$std_oid" '{ print oid us $0 }' "$std_scan/cfglines" \
+                awk -v us="$std_us" -v oid="$std_oid" '{ print oid us $1 us $2 }' "$std_scan/cfglines" \
                     >> "$std_scan/cfgallow" || std_fail "cannot read .github/standard.conf"
                 ;;
             1) ;;
@@ -539,7 +587,7 @@ scan_run() {
         }
         function emit(kind, id, path, where, value) {
             if (id != "" && (kind us id) in accu) return
-            if (path != "" && (kind us path) in accp) return
+            if (id == "" && path != "" && (kind us path) in accp) return
             print kind us path us where us value > (dir "/rec." kind)
             print value > (dir "/vals." kind)
             print path > (dir "/paths." kind)
@@ -579,7 +627,7 @@ scan_run() {
                 c = split(substr(bp[id], 2), paths, us)
                 for (j = 1; j <= c; j++) {
                     if (kind != "denylist" && paths[j] == ".github/standard.conf" &&
-                        ((id us line) in cfga)) continue
+                        ((id us line us kind) in cfga)) continue
                     emit(kind, id, paths[j], shown(paths[j]) ":" line, value)
                 }
             } else if (utype[id] == "commit") {

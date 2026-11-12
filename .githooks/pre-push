@@ -55,7 +55,8 @@ done < "$std_tmp/refs"
 
 sh "$std_here/privacy-scan" --message "$std_tmp/names" < /dev/null || {
     status=$?
-    std_say "a branch or tag name above holds a finding (as a message line); rename it."
+    [ "$status" -ne 1 ] ||
+        std_say "a branch or tag name above holds a finding (as a message line); rename it."
     exit "$status"
 }
 if [ -s "$std_tmp/tips" ]; then

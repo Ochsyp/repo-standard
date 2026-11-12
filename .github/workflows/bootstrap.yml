@@ -1,7 +1,9 @@
 # Temporary CI of repo-standard's phase 1. Phase 2 removes it and brings the standard's own
 # workflows. It runs the standard's suites and the tests of tools/ on Linux, and in Git Bash on
-# Windows, with bats pinned through install-tools, so phase 1 does not merge untested; on Linux
-# it also runs the lint suite, the privacy rules over the tree and the MANIFEST check.
+# Windows, with bats pinned through install-tools, so phase 1 does not merge untested. It runs
+# the standard's suites again in a scratch consumer that holds only what the MANIFEST vendors
+# (tools/consumer-suite), so a test that needs a file only repo-standard holds fails here. On
+# Linux it also runs the lint suite, the privacy rules over the tree and the MANIFEST check.
 name: bootstrap
 
 on:
@@ -33,8 +35,14 @@ jobs:
         run: bats --tap .github/standard/tests/ | tee "$RUNNER_TEMP/standard.tap"
       - name: The tests of tools/
         run: bats --tap tests/ | tee "$RUNNER_TEMP/tools.tap"
+      - name: A scratch consumer with only what the MANIFEST vendors
+        run: sh tools/consumer-suite ../consumer
+      - name: The standard's suites in the scratch consumer, lint included
+        run: bats --tap ../consumer/.github/standard/tests/ | tee "$RUNNER_TEMP/consumer.tap"
       - name: No test failed or skipped
-        run: .github/standard/bin/no-skips "$RUNNER_TEMP/standard.tap" "$RUNNER_TEMP/tools.tap"
+        run: >-
+          .github/standard/bin/no-skips "$RUNNER_TEMP/standard.tap" "$RUNNER_TEMP/tools.tap"
+          "$RUNNER_TEMP/consumer.tap"
       - name: The privacy rules over the tree
         run: sh .githooks/privacy-scan --tracked
       - name: The MANIFEST matches the tree
@@ -53,5 +61,13 @@ jobs:
         run: bats --tap --filter-tags '!lint' .github/standard/tests/ | tee "$RUNNER_TEMP/standard.tap"
       - name: The tests of tools/ in Git Bash, lint aside
         run: bats --tap --filter-tags '!lint' tests/ | tee "$RUNNER_TEMP/tools.tap"
+      - name: A scratch consumer with only what the MANIFEST vendors
+        run: sh tools/consumer-suite ../consumer
+      - name: The standard's suites in the scratch consumer, in Git Bash, lint aside
+        run: >-
+          bats --tap --filter-tags '!lint' ../consumer/.github/standard/tests/
+          | tee "$RUNNER_TEMP/consumer.tap"
       - name: No test failed or skipped
-        run: .github/standard/bin/no-skips "$RUNNER_TEMP/standard.tap" "$RUNNER_TEMP/tools.tap"
+        run: >-
+          .github/standard/bin/no-skips "$RUNNER_TEMP/standard.tap" "$RUNNER_TEMP/tools.tap"
+          "$RUNNER_TEMP/consumer.tap"

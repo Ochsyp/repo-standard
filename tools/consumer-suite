@@ -1,0 +1,159 @@
+#!/bin/sh
+# tools/consumer-suite of repo-standard: builds a scratch consumer from what the MANIFEST vendors,
+# so that CI runs the standard's suites where only the vendored files exist, as in every
+# consumer. A test that needs a file only repo-standard holds, such as blocks/ or tools/, then
+# fails before a release. It runs here only; it is not vendored.
+#   tools/consumer-suite [--rev REV] DEST
+# It reads the MANIFEST of the index, or of the commit REV, and builds the repository DEST, which
+# must be missing or empty. DEST holds the MANIFEST and what it gives a public consumer with
+# LICENSE=MIT and RELEASE_KIND=tar: each file entry, written from the blob the entry names with
+# the entry's mode, and each block between its markers in its target file. It also holds that
+# consumer's .github/standard.conf, and a ci/test and a ci/test.ps1. They are committed once in
+# a source repository and cloned into DEST, so the work tree has the line ends of a checkout:
+# ci/test.ps1 gets CRLF. git runs without the global and the system config and without a
+# template, so no hook, identity or setting of the machine takes part.
+# Then run the suites there: bats DEST/.github/standard/tests/
+set -eu
+
+usage() {
+    echo "usage: tools/consumer-suite [--rev REV] DEST" >&2
+    exit 64
+}
+
+rev=
+dest=
+while [ "$#" -gt 0 ]; do
+    case $1 in
+        --rev)
+            [ "$#" -ge 2 ] || usage
+            rev=$2
+            shift
+            ;;
+        -*) usage ;;
+        *)
+            [ -z "$dest" ] || usage
+            dest=$1
+            ;;
+    esac
+    shift
+done
+[ -n "$dest" ] || usage
+
+fail() {
+    printf 'consumer-suite: %s\n' "$1" >&2
+    exit 2
+}
+
+top=$(git rev-parse --show-toplevel 2> /dev/null) || fail "not in a git work tree"
+if [ -e "$dest" ] && [ -n "$(ls -A -- "$dest")" ]; then
+    fail "$dest is not empty"
+fi
+mkdir -p -- "$dest" || fail "cannot create $dest"
+dest=$(cd -- "$dest" && pwd) || fail "cannot enter $dest"
+cd "$top"
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/consumer-suite.XXXXXX") || exit 2
+trap 'rm -rf -- "$tmp"' EXIT
+src=$tmp/source
+
+# The MANIFEST: of the commit REV, or of the index.
+if [ -n "$rev" ]; then
+    oid=$(git rev-parse --verify --quiet "$rev^{commit}") || fail "no commit $rev"
+    mo=$(git ls-tree "$oid" -- .github/standard/MANIFEST | awk '{ print $3 }')
+else
+    mo=$(git ls-files -s -- .github/standard/MANIFEST | awk '{ print $2 }')
+fi
+[ -n "$mo" ] || fail ".github/standard/MANIFEST is missing"
+git cat-file blob "$mo" > "$tmp/manifest" || fail "cannot read the MANIFEST"
+
+# The entries this consumer takes, as "type oid mode path" lines: standard-check selects the
+# same profiles for VISIBILITY=public, LICENSE=MIT and RELEASE_KIND=tar.
+awk '($1 == "file" || $1 == "block") && NF == 5 &&
+    ($2 == "all" || $2 == "release" || $2 == "mit" || $2 == "public") { print $1, $3, $4, $5 }' \
+    "$tmp/manifest" > "$tmp/entries"
+[ -s "$tmp/entries" ] || fail "the MANIFEST lists nothing"
+
+# From here on git reads no global or system config and finds each repository by its folder.
+: > "$tmp/gitconfig"
+mkdir "$tmp/template"
+GIT_CONFIG_GLOBAL=$tmp/gitconfig
+GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+git init -q -b main --template="$tmp/template" "$src" || fail "cannot create the source repository"
+
+while read -r type oid mode path; do
+    case $type in
+        file)
+            mkdir -p -- "$src/$(dirname -- "$path")"
+            git -C "$top" cat-file blob "$oid" > "$src/$path" ||
+                fail "cannot read the blob of $path: is the MANIFEST stale?"
+            if [ "$mode" = 100755 ]; then chmod +x "$src/$path"; fi
+            ;;
+        block)
+            target=${path%%#*}
+            name=${path#*#}
+            name=${name%%@*}
+            mkdir -p -- "$src/$(dirname -- "$target")"
+            case $target in
+                *.md) begin="<!-- standard:begin $name -->" end="<!-- standard:end $name -->" ;;
+                *) begin="# standard:begin $name" end="# standard:end $name" ;;
+            esac
+            {
+                printf '%s\n' "$begin"
+                git -C "$top" cat-file blob "$oid" ||
+                    fail "cannot read the block $path: is the MANIFEST stale?"
+                printf '%s\n' "$end"
+            } >> "$src/$target"
+            ;;
+    esac
+done < "$tmp/entries"
+cp "$tmp/manifest" "$src/.github/standard/MANIFEST"
+
+cat > "$src/.github/standard.conf" << 'EOF'
+# The config of a scratch consumer that tools/consumer-suite of repo-standard builds.
+NAME=example
+VISIBILITY=public
+RELEASE_KIND=tar
+PRIVACY_RULES=base
+EOF
+sh "$src/.github/standard/bin/conf" --check "$src/.github/standard.conf" ||
+    fail "the consumer's config does not parse"
+
+mkdir -p "$src/ci"
+cat > "$src/ci/test" << 'EOF'
+#!/bin/sh
+# ci/test of a scratch consumer that tools/consumer-suite of repo-standard builds.
+set -eu
+echo "ci/test: no tests of its own"
+EOF
+chmod +x "$src/ci/test"
+cat > "$src/ci/test.ps1" << 'EOF'
+# ci/test.ps1 of a scratch consumer that tools/consumer-suite of repo-standard builds. Git stores
+# it with LF; the .gitattributes block checks it out with CRLF.
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+EOF
+
+git -C "$src" -c core.safecrlf=false add -A || fail "cannot stage the files"
+# git on Windows stages new files as 100644: give the executables their mode.
+{
+    awk '$1 == "file" && $3 == "100755" { print $4 }' "$tmp/entries"
+    echo ci/test
+} | xargs git -C "$src" update-index --chmod=+x -- || fail "cannot set the modes"
+git -C "$src" -c user.name="Consumer Suite" -c user.email=consumer-suite@example.invalid \
+    commit -q -m "chore: a scratch consumer of the standard" || fail "cannot commit"
+git clone -q --template="$tmp/template" "$src" "$dest" || fail "cannot clone into $dest"
+git -C "$dest" remote remove origin || fail "cannot remove the source remote"
+
+# Every file entry is in DEST with the blob and the mode the MANIFEST names.
+git -C "$dest" ls-files -s > "$tmp/files" || fail "cannot list $dest"
+awk 'NR == FNR { if ($1 == "file") { want[$4] = $3 " " $2; n++ } next }
+    { split($0, f, "\t"); split(f[1], m, " ")
+      if ((f[2] in want) && want[f[2]] == m[1] " " m[2]) ok++ }
+    END { exit ok != n }' "$tmp/entries" "$tmp/files" ||
+    fail "$dest does not hold each file with the MANIFEST's blob and mode"
+
+printf 'consumer-suite: %s holds %s file(s) and %s block(s) of standard %s\n' "$dest" \
+    "$(awk '$1 == "file"' "$tmp/entries" | awk 'END { print NR }')" \
+    "$(awk '$1 == "block"' "$tmp/entries" | awk 'END { print NR }')" \
+    "$(awk '$1 == "standard" { print $2; exit }' "$tmp/manifest")"

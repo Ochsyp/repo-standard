@@ -252,7 +252,8 @@ if [ -z "$vo" ]; then
 else
     git cat-file blob "$vo" > "$t/version" || std_fail "cannot read VERSION"
     version=$(cat "$t/version")
-    if ! printf '%s\n' "$version" | cmp -s - "$t/version" ||
+    if [ "$(awk 'END { print NR }' "$t/version")" -ne 1 ] ||
+        ! printf '%s\n' "$version" | cmp -s - "$t/version" ||
         ! printf '%s\n' "$version" |
         grep -q -x -E '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev)?'; then
         problem "VERSION: not one line X.Y.Z or X.Y.Z-dev with LF, without leading zeros"

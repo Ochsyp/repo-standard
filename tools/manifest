@@ -61,6 +61,7 @@ fi
 vo=$(awk -F '\t' '$2 == "VERSION" { split($1, m, " "); print m[2] }' "$tmp/tree")
 [ -n "$vo" ] || fail "VERSION is missing"
 version=$(git cat-file blob "$vo") || fail "cannot read VERSION"
+[ "$(git cat-file blob "$vo" | awk 'END { print NR }')" -eq 1 ] || fail "VERSION is not one line"
 printf '%s\n' "$version" | grep -q -x -E '[0-9]+\.[0-9]+\.[0-9]+(-dev)?' ||
     fail "VERSION is not X.Y.Z or X.Y.Z-dev"
 

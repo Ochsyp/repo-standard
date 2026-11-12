@@ -1,7 +1,22 @@
 #!/bin/sh
 # commit-msg of the repository standard: the same file in every repository; never edit it here.
 # Refuses a commit message that privacy-scan refuses: a denylist term or a rule pack hit. git
-# passes the message file as $1; when an editor wrote the message, the file still holds git's
-# comment lines, such as the branch name, and a hit there is refused too.
+# passes the message file as $1 before its own cleanup, so the hook scans what the commit will
+# record: the text above git's scissors line (commit -v puts the diff below it) and, unless
+# commit.cleanup keeps them, no comment lines (git's status, untracked file names). pre-push
+# checks the branch names.
 set -eu
-exec sh "$(dirname -- "$0")/privacy-scan" --message "$1"
+here=$(dirname -- "$0")
+tmp=$(mktemp "${TMPDIR:-/tmp}/commit-msg.XXXXXX") || exit 2
+trap 'rm -f -- "$tmp" "$tmp.text"' EXIT
+trap 'exit 1' HUP INT TERM
+# The scissors line: the comment character, a space, and -------- >8 -------- (24 dashes each).
+sed '/^. -\{24\} >8 -\{24\}$/,$d' "$1" > "$tmp" || exit 2
+case $(git config --get commit.cleanup || true) in
+    verbatim | whitespace) ;;
+    *)
+        git stripspace --strip-comments < "$tmp" > "$tmp.text" || exit 2
+        mv -f -- "$tmp.text" "$tmp" || exit 2
+        ;;
+esac
+sh "$here/privacy-scan" --message "$tmp"

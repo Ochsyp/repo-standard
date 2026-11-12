@@ -595,3 +595,139 @@ named_home() {
     [ "$status" -eq 1 ]
     [[ $output == *"leak.txt:1: denylist"* ]]
 }
+
+@test "a configured list without a term counts as missing under privacy.requireDenylist" {
+    make_repo
+    write_denylist
+    mkdir -p "$HOME/lists"
+    printf '%s\n' '# emptied by mistake' '' > "$HOME/lists/b"
+    git config --global privacy.requireDenylist true
+    git config --global privacy.denylist '~/lists/b'
+    git -C "$REPO" switch -q -c feat/example
+    stage notes.txt 'synthetic notes'
+    try_commit "docs: add notes"
+    [ "$status" -ne 0 ]
+    [[ $output == *"the denylist ~/lists/b holds no term, and privacy.requireDenylist is true"* ]]
+}
+
+@test "commit-msg scans only what the commit records: no -v diff, no comment lines" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c fix/cleanup
+    stage notes.txt "contact $DENY_TERM"
+    commit_unchecked "docs: add notes"
+    stage notes.txt 'synthetic notes'
+    printf 'x\n' > "$REPO/$DENY_TERM-untracked.txt"
+    run env GIT_EDITOR=true git -C "$REPO" commit -q -v -e -m "fix: remove the private term"
+    [ "$status" -eq 0 ]
+    refute_term_shown
+}
+
+@test "pre-commit refuses a commit on main checked out as MAIN" {
+    make_repo
+    git -C "$REPO" symbolic-ref HEAD refs/heads/MAIN
+    stage notes.txt 'synthetic notes'
+    try_commit "docs: add notes"
+    [ "$status" -ne 0 ]
+    [[ $output == *"commits on 'MAIN' are refused"* ]]
+}
+
+@test "pre-push scans the message of an annotated release tag under RELEASE_KIND=legacy" {
+    make_repo
+    add_remote
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    commit_config RELEASE_KIND=legacy
+    git -C "$REPO" -c core.hooksPath=no-hooks tag -a v1.0.0 -m "release by $DENY_TERM"
+    run sh -c 'cd "$1" && exec sh .githooks/pre-push origin https://example.invalid/r.git' sh "$REPO" \
+        <<< "refs/tags/v1.0.0 $(git -C "$REPO" rev-parse v1.0.0) refs/tags/v1.0.0 $ZERO_OID"
+    [ "$status" -ne 0 ]
+    [[ $output == *"tag object "*": denylist"* ]]
+    refute_term_shown
+}
+
+@test "a relative list named like an awk assignment or an option is still read" {
+    local name
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    for name in 'deny=list' '-deny'; do
+        printf '%s\n' "$DENY_TERM" > "$REPO/$name"
+    done
+    git -C "$REPO" config privacy.denylist 'deny=list'
+    git -C "$REPO" config --add privacy.denylist '-deny'
+    git -C "$REPO" config privacy.requireDenylist true
+    stage notes.txt "contact $DENY_TERM"
+    try_commit "docs: add notes"
+    [ "$status" -ne 0 ]
+    [[ $output == *"notes.txt:1: denylist"* ]]
+    [[ $output != *"holds no term"* ]]
+    refute_term_shown
+}
+
+@test "pre-push scans the names a root commit adds, whatever log.showRoot and showSignature say" {
+    make_repo
+    add_remote
+    write_denylist
+    git config --global log.showRoot false
+    git config --global log.showSignature true
+    git -C "$REPO" switch -q --orphan feat/example
+    # README.md's content, which origin already holds: only the path name is new.
+    stage "docs/notes-$DENY_TERM.md" 'synthetic test repository'
+    commit_unchecked "docs: add notes"
+    run_pre_push refs/heads/feat/example
+    [ "$status" -ne 0 ]
+    [[ $output == *"path name 1 of the scanned paths: denylist"* ]]
+    refute_term_shown
+}
+
+@test "pre-push gives the rename advice only for a finding, not when the scan cannot run" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    commit_config 'PRIVACY_RULES=base disk'
+    rm "$REPO/.githooks/rules/disk"
+    run_pre_push refs/heads/feat/example
+    [ "$status" -eq 2 ]
+    [[ $output == *"the rule pack disk is missing"* ]]
+    [[ $output != *"a branch or tag name above holds a finding"* ]]
+}
+
+@test "pre-commit scans before the copy guard, so standard-check never shows a staged path name" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    commit_config
+    stage .github/standard/MANIFEST 'standard 1.0.0'
+    commit_unchecked "chore: adopt the standard"
+    stage ".github/workflows/deploy-$DENY_TERM.yml" 'name: deploy'
+    try_commit "ci: add a deploy workflow"
+    [ "$status" -ne 0 ]
+    [[ $output == *"path name 1 of the scanned paths: denylist"* ]]
+    [[ $output != *"not in the MANIFEST"* ]]
+    refute_term_shown
+}
+
+# Bug 12: a loop per staged file took minutes on Windows. The engine runs a fixed number of
+# processes, so git and grep run as often for 50 staged files as for one.
+@test "pre-commit runs git and grep as often for 50 staged files as for one" {
+    local i one many
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    commit_config 'PRIVACY_RULES=base disk vm'
+    stub_init
+    mkstub git <<< "exec $(printf '%q' "$(command -v git)") \"\$@\""
+    mkstub grep <<< "exec $(printf '%q' "$(command -v grep)") \"\$@\""
+    stage notes-0.txt 'synthetic notes 0'
+    PATH="$STUB_BIN:$PATH" sh -c 'cd "$1" && exec sh .githooks/pre-commit' sh "$REPO"
+    one=$(awk '{ print $1 }' "$STUB_LOG" | sort | uniq -c)
+    : > "$STUB_LOG"
+    for i in {1..49}; do
+        printf 'synthetic notes %s\n' "$i" > "$REPO/notes-$i.txt"
+    done
+    git -C "$REPO" add -- 'notes-*.txt'
+    PATH="$STUB_BIN:$PATH" sh -c 'cd "$1" && exec sh .githooks/pre-commit' sh "$REPO"
+    many=$(awk '{ print $1 }' "$STUB_LOG" | sort | uniq -c)
+    [[ -n $one && $one == "$many" ]] ||
+        { printf 'one file:\n%s\n50 files:\n%s\n' "$one" "$many" >&2; return 1; }
+}

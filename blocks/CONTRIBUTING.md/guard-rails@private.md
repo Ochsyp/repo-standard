@@ -20,5 +20,6 @@ The rule packs in `.githooks/rules/` hold the patterns: private addresses, local
 addresses, home paths, e-mail addresses, and disk and VM identifiers where the config enables
 them. A refusal names the file and line and the kind of finding, never the value.
 
-The maintainer's git configuration turns the hooks on for every clone. Anywhere else, turn them
-on once after cloning: `git config core.hooksPath .githooks`. Never use `--no-verify`.
+The maintainer's git configuration turns the hooks on for every clone of this repository's GitHub
+URL. In a clone made from a local path, or anywhere else, turn them on once after cloning:
+`git config core.hooksPath .githooks`. Never use `--no-verify`.

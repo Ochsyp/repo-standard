@@ -160,7 +160,8 @@ MAX_BLOB_KB=1024" ]
 }
 
 @test "PRIVACY_ALLOW refuses an ERE that does not compile" {
-    write_config "PRIVACY_ALLOW=home-path ^tests/( ^$SYN_HOME$"
+    # An unterminated bracket expression: balanced parentheses, but grep cannot compile it.
+    write_config "PRIVACY_ALLOW=home-path ^tests/[ ^$SYN_HOME$"
     run_conf --check "$FILE"
     [ "$status" -eq 1 ]
     [[ $stderr == *"PRIVACY_ALLOW: an ERE does not compile"* ]]
@@ -221,9 +222,14 @@ MAX_BLOB_KB=1024" ]
     [ "$output" = "home-path ^tests/ ^$SYN_HOME$" ]
 }
 
-@test "PRIVACY_ALLOW refuses a | outside parentheses and a path ERE without ^" {
+@test "PRIVACY_ALLOW refuses a | outside parentheses, unbalanced ones, and a path ERE without ^" {
     local bad
-    for bad in "home-path ^x/ ^$SYN_HOME\$|b\$" "home-path ^x/|^y/ ^$SYN_HOME\$" \
+    # GNU grep takes an unmatched ) as a literal, so ^a)|b$ would compile with b$ unanchored.
+    # Escaped parentheses and parentheses in a bracket expression are literals too: the | in
+    # ^\(a|b\)$ and in ^a[)]|b$ sits outside every group.
+    for bad in "home-path ^x/ ^$SYN_HOME\$|b\$" "home-path ^x/ ^$SYN_HOME)|b\$" \
+        "home-path ^x/ ^\\($SYN_HOME|b\\)\$" "home-path ^x/ ^${SYN_HOME}[)]|b\$" \
+        "home-path ^x/|^y/ ^$SYN_HOME\$" "home-path ^x)|y/ ^$SYN_HOME\$" \
         "home-path x/ ^$SYN_HOME\$"; do
         write_config "PRIVACY_ALLOW=$bad"
         run_conf --check "$FILE"
@@ -242,9 +248,16 @@ MAX_BLOB_KB=1024" ]
     write_config "PRIVACY_ALLOW=home-path ^tests/ ^$SYN_HOME\$" PRIVACY_RULES=base
     run_conf --allow-lines "$FILE"
     [ "$status" -eq 0 ]
-    [ "$output" = 4 ]
+    [ "$output" = "4 home-path" ]
     write_config "PRIVACY_ALLOW=home-path ^tests/ $SYN_HOME\$"
     run_conf --allow-lines "$FILE"
     [ "$status" -eq 1 ]
     [ -z "$output" ]
+}
+
+@test "PRIVACY_ALLOW refuses a path ERE that holds a value a rule pack matches" {
+    write_config "$(printf 'PRIVACY_ALLOW=ipv4-private ^%s.%s.7.9 ^x$' 192 168)"
+    run_conf --check "$FILE"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"the path ERE holds a value a rule pack matches"* ]]
 }

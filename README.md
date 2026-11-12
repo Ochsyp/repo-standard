@@ -15,7 +15,9 @@ edits the copies; `.github/standard/MANIFEST` lists them.
 - `blocks/`: the canonical body of each block that repositories carry inside files they own,
   such as `blocks/SECURITY.md/reporting@private.md`; a hidden name's leading dot is written as `_`
   there (`blocks/_github/dependabot.yml/`), since git refuses a folder named `.gitattributes`.
-- `tools/manifest`: writes `.github/standard/MANIFEST`. `tests/` holds the tests of `tools/`.
+- `tools/manifest`: writes `.github/standard/MANIFEST`. `tools/consumer-suite`: builds a scratch
+  consumer that holds only what the MANIFEST vendors, where CI runs the standard's suites again.
+  `tests/` holds the tests of `tools/`.
 
 ## Status
 
@@ -27,5 +29,7 @@ Phase 1 (hooks and checks) is under review. Phase 2 brings the workflows, the re
 - `bats .github/standard/tests/hooks.bats` and the other suites, one file at a time on Windows
   (Git Bash); `bats tests/` for `tools/`.
 - `sh .githooks/privacy-scan --tracked` and `sh tools/manifest --check`.
+- `sh tools/consumer-suite DIR`, then `bats DIR/.github/standard/tests/`: the standard's suites
+  where only the vendored files exist, as in a consumer.
 - CI (the temporary `bootstrap` workflow) runs every suite on Linux and in Git Bash on Windows,
-  and fails on any skipped test.
+  then the standard's suites again in a scratch consumer, and fails on any skipped test.

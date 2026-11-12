@@ -14,13 +14,19 @@ All notable changes to this project are listed here. The format follows
   NUL-stripped stream and one grep per rule (phase 1)
 - The denylist loader in `.githooks/lib.sh`: every `privacy.denylist` list (`--type=path`), the
   per-user and per-clone lists, `privacy.requireDenylist` (`--type=bool`), duplicate lists kept
-  once, and lists named only as `~/...` or "list N of M" (phase 1)
-- The rule packs `base`, `disk` (with the `/dev/disk/by-id/` rule) and `vm`, and the
-  `PRIVACY_ALLOW` and `PRIVACY_HISTORY_ACCEPT` limits (phase 1)
+  once, a configured list without a term counted as missing, and lists named only as `~/...` or
+  "list N of M" (phase 1)
+- The rule packs `base`, `disk` (with the `/dev/disk/by-id/` rule) and `vm`, the fullwidth at
+  sign read as `@`, and the `PRIVACY_ALLOW` (one kind per line) and `PRIVACY_HISTORY_ACCEPT`
+  limits (phase 1)
 - `conf`, `standard-check`, `install-tools`, `no-skips`, `tools/manifest`, the canonical block
   bodies in `blocks/`, and the bats suites `hooks.bats`, `privacy-scan.bats`, `conf.bats`,
-  `standard-check.bats`, `lint.bats` and `tests/manifest.bats` with their `lib.bash` (phase 1)
+  `standard-check.bats`, `lint.bats`, `tests/manifest.bats` and `tests/source-check.bats` with
+  their `lib.bash` (phase 1)
 - A temporary `bootstrap` workflow that runs the suites on Linux and in Git Bash on Windows
   (phase 1)
+- `tools/consumer-suite`, which builds a scratch consumer that holds only what the MANIFEST
+  vendors; `bootstrap` runs the standard's suites there too, so a vendored test that needs a file
+  only this repository holds fails in CI (phase 1)
 
 [Unreleased]: https://github.com/Ochsyp/repo-standard/commits/main

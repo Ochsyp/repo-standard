@@ -10,6 +10,13 @@ load lib
 
 setup() {
     isolate_home
+    # Synthetic block bodies, so that the suite runs in every repository of the standard.
+    BODIES="$BATS_TEST_TMPDIR/bodies"
+    mkdir -p "$BODIES/_github/dependabot.yml" "$BODIES/SECURITY.md"
+    printf '%s\n' '# Synthetic Dependabot head.' 'version: 2' 'updates:' \
+        > "$BODIES/_github/dependabot.yml/dependabot.yml"
+    printf '%s\n' '## Reporting' '' 'Do not open a public issue.' > "$BODIES/SECURITY.md/reporting@public.md"
+    printf '%s\n' '## Reporting' '' 'Report to the maintainer.' > "$BODIES/SECURITY.md/reporting@private.md"
 }
 
 # Run standard-check MODE in $REPO through bats `run`, stderr apart.
@@ -18,24 +25,24 @@ check() {
         sh "$REPO" "$1"
 }
 
-# Print a block: its begin marker, the body file BODY of this repository's blocks/, its end
+# Print a block: its begin marker, the body file BODY of the synthetic bodies, its end
 # marker. NAME and STYLE (md or hash) pick the markers.
 block() {
     local name=$1 style=$2 body=$3
     if [[ $style == md ]]; then
         printf '<!-- standard:begin %s -->\n' "$name"
-        cat "$REPO_ROOT/blocks/$body"
+        cat "$BODIES/$body"
         printf '<!-- standard:end %s -->\n' "$name"
     else
         printf '# standard:begin %s\n' "$name"
-        cat "$REPO_ROOT/blocks/$body"
+        cat "$BODIES/$body"
         printf '# standard:end %s\n' "$name"
     fi
 }
 
-# Print the blob id of this repository's block body FILE.
+# Print the blob id of the synthetic block body FILE.
 body_id() {
-    git hash-object --no-filters "$REPO_ROOT/blocks/$1"
+    git hash-object --no-filters "$BODIES/$1"
 }
 
 # Write and stage $REPO's MANIFEST: every copy under .githooks/ and .github/standard/, LICENSE
@@ -176,13 +183,14 @@ make_consumer() {
     [[ $stderr == *"LICENSE: exists, but the config says LICENSE=none"* ]]
     git -C "$REPO" rm -q --cached LICENSE
     check --staged
+    [ "$status" -eq 0 ]
     [[ $stderr != *"LICENSE:"* ]]
 }
 
 @test "VERSION and VERSION_COPY need their form" {
     local bad
     make_consumer
-    for bad in '01.0.0' '1.0' '1.0.0-rc1' $'1.0.0\r' $'\357\273\2771.0.0'; do
+    for bad in '01.0.0' '1.0' '1.0.0-rc1' $'1.0.0\r' $'\357\273\2771.0.0' $'1.0.0\nmore'; do
         printf '%s\n' "$bad" > "$REPO/VERSION"
         git -C "$REPO" add VERSION
         check --staged
@@ -328,52 +336,6 @@ make_consumer() {
     [[ $stderr == *"warning: remote upstream is example of another owner than origin"* ]]
 }
 
-@test "ROLE=source: a stale MANIFEST is a notice, and an error on a release pull request" {
-    local base dir=$BATS_TEST_TMPDIR/repo
-    make_repo
-    write_config ROLE=source PRIVACY_RULES=base
-    printf '1.0.0\n' > "$REPO/VERSION"
-    printf 'Synthetic licence text.\n' > "$REPO/LICENSE"
-    mkdir -p "$REPO/ci" "$REPO/tools"
-    printf '#!/bin/sh\nexit 0\n' > "$REPO/ci/test"
-    cp "$REPO_ROOT/tools/manifest" "$REPO/tools/manifest"
-    cp -R "$REPO_ROOT/blocks" "$REPO/blocks"
-    { block dependabot hash _github/dependabot.yml/dependabot.yml
-      printf '  - package-ecosystem: github-actions\n    directory: /\n'; } > "$REPO/.github/dependabot.yml"
-    git -C "$REPO" add -A
-    stage_executables
-    (cd "$REPO" && sh tools/manifest)
-    git -C "$REPO" add .github/standard/MANIFEST
-    commit_unchecked "chore: the source"
-    base=$(git -C "$REPO" rev-parse HEAD)
-    check --ci
-    [ "$status" -eq 0 ]
-    printf '# edited\n' >> "$REPO/.githooks/rules/vm"
-    git -C "$REPO" add .githooks/rules/vm
-    commit_unchecked "fix: edit a rule pack"
-    check --ci
-    [ "$status" -eq 0 ]
-    [[ $stderr == *"notice: .github/standard/MANIFEST differs from the tree"* ]]
-    printf '1.0.1\n' > "$REPO/VERSION"
-    git -C "$REPO" add VERSION
-    commit_unchecked "chore: release 1.0.1"
-    EVENT=pull_request BASE=$base run --separate-stderr sh -c \
-        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
-    [ "$status" -eq 1 ]
-    [[ $stderr == *".github/standard/MANIFEST: differs from the tree; run tools/manifest"* ]]
-    # A copy that names a private repository fails as well.
-    printf 'example-private\n' > "$REPO/config-names"
-    mkdir -p "$REPO/config"
-    mv "$REPO/config-names" "$REPO/config/private-names"
-    printf '# see example-private\n' >> "$REPO/.githooks/rules/disk"
-    git -C "$REPO" add config/private-names .githooks/rules/disk
-    (cd "$REPO" && sh tools/manifest)
-    git -C "$REPO" add .github/standard/MANIFEST
-    check --staged
-    [ "$status" -eq 1 ]
-    [[ $stderr == *".githooks/rules/disk: names a private repository"* ]]
-}
-
 @test "a staged ROLE=source does not switch off the copy checks" {
     make_consumer
     write_config VISIBILITY=public PRIVACY_RULES=base ROLE=source
@@ -420,4 +382,61 @@ make_consumer() {
         'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
     [ "$status" -eq 1 ]
     [[ $stderr == *"a base config that does not parse"* ]]
+}
+
+@test "--ci on a pull request: an exemption, .gitleaksignore and a dropped stage loosen; more packs do not" {
+    local base lint dir=$BATS_TEST_TMPDIR/repo
+    make_consumer
+    base=$(git -C "$REPO" rev-parse main)
+    export EVENT=pull_request
+    write_config VISIBILITY=public PRIVACY_RULES=base \
+        'PRIVACY_ALLOW=ipv4-private ^compose\.yaml$ ^172\.30\.0\.[0-9]+$'
+    printf 'synthetic-fingerprint\n' > "$REPO/.gitleaksignore"
+    git -C "$REPO" add .github/standard.conf .gitleaksignore
+    commit_unchecked "chore: exempt a synthetic address"
+    BASE=$base HEAD_REF=feat/example HEAD_REPO=o/r REPO=o/r run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"an exemption or accept record"* ]]
+    [[ $stderr == *".gitleaksignore"* ]]
+    BASE=$base HEAD_REF=chore/privacy-exempt HEAD_REPO=someone/r REPO=o/r run --separate-stderr \
+        sh -c 'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"loosening comes from another repository"* ]]
+    git -C "$dir" switch -q -c feat/stages "$base"
+    write_config VISIBILITY=public PRIVACY_RULES=base 'CI_STAGES=lint test'
+    git -C "$dir" add .github/standard.conf
+    commit_unchecked "ci: add the lint stage"
+    lint=$(git -C "$dir" rev-parse HEAD)
+    write_config VISIBILITY=public PRIVACY_RULES=base
+    git -C "$dir" add .github/standard.conf
+    commit_unchecked "ci: drop the lint stage"
+    BASE=$lint HEAD_REF=feat/stages HEAD_REPO=o/r REPO=o/r run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"a dropped CI stage"* ]]
+    git -C "$dir" switch -q -c feat/more-packs "$base"
+    write_config VISIBILITY=public 'PRIVACY_RULES=base disk'
+    git -C "$dir" add .github/standard.conf
+    commit_unchecked "chore: add the disk pack"
+    BASE=$base HEAD_REF=feat/more-packs HEAD_REPO=o/r REPO=o/r run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
+    [ "$status" -eq 0 ]
+}
+
+@test "a missing or unparsable config, and a missing LICENSE under LICENSE=MIT, fail" {
+    make_consumer
+    git -C "$REPO" rm -q --cached LICENSE
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"LICENSE: missing, and the config says LICENSE=MIT"* ]]
+    printf 'BOGUS=1\n' >> "$REPO/.github/standard.conf"
+    git -C "$REPO" add .github/standard.conf
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *".github/standard.conf: does not parse"* ]]
+    git -C "$REPO" rm -q --cached .github/standard.conf
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *".github/standard.conf: missing"* ]]
 }

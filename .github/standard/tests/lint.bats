@@ -88,12 +88,13 @@ shell_files() {
     done < <(git -C "$REPO_ROOT" ls-files -- .githooks .github/standard/bin)
 }
 
-@test "the standard's files and ci/ hold no CR byte" {
+@test "the standard's files and the ci/ shell scripts hold no CR byte" {
     local -a files=()
     local path
     while IFS= read -r path; do
         files+=("$REPO_ROOT/$path")
-    done < <(git -C "$REPO_ROOT" ls-files -- .githooks .github/standard ci)
+    done < <(git -C "$REPO_ROOT" ls-files -- .githooks .github/standard
+        shell_files | awk '$2 ~ /^ci\// { print $2 }')
     (( ${#files[@]} > 0 ))
     # -U keeps a grep that reads files in text mode from dropping each CR before it matches.
     run grep -U -l $'\r' -- "${files[@]}"

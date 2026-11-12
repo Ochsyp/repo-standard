@@ -36,6 +36,20 @@ case $mode in
     *) usage ;;
 esac
 
+# Run from the top of the work tree, as git runs hooks, so that every listing covers the whole
+# tree; a relative message file is read from where the command started. A bare mirror has no
+# work tree and stays where it is.
+if [ "$mode" = --message ] && [ "$1" != - ]; then
+    case $1 in
+        /* | [A-Za-z]:*) ;;
+        *) set -- "$(pwd)/$1" ;;
+    esac
+fi
+std_here=$(cd "$std_here" && pwd) || exit 2
+if std_top=$(git rev-parse --show-toplevel 2> /dev/null); then
+    cd "$std_top" || exit 2
+fi
+
 std_load_config
 deny_load
 deny_enforce
