@@ -286,3 +286,25 @@ synthetic() {
     [ "$status" -eq 2 ]
     [[ $stderr == *"the rule pack vm is missing"* ]]
 }
+
+@test "the packs skip only the PRIVACY_ALLOW lines that conf accepts, and only in the config" {
+    local home
+    home=$(printf '/%s/%s' home example-user)
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    commit_config PRIVACY_RULES=base
+    # An unanchored value ERE: conf refuses the line, so the packs scan it.
+    write_config PRIVACY_RULES=base "PRIVACY_ALLOW=home-path ^tests/ $home\$"
+    git -C "$REPO" add .github/standard.conf
+    scan --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *".github/standard.conf:5: home-path"* ]]
+    # An accepted line passes in the config, but the same blob at another path is scanned.
+    write_config PRIVACY_RULES=base "PRIVACY_ALLOW=home-path ^tests/ ^$home\$"
+    cp "$REPO/.github/standard.conf" "$REPO/copy.conf"
+    git -C "$REPO" add .github/standard.conf copy.conf
+    scan --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"copy.conf:5: home-path"* ]]
+    [[ $stderr != *"standard.conf:5"* ]]
+}

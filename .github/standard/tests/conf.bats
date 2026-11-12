@@ -220,3 +220,31 @@ MAX_BLOB_KB=1024" ]
     [ "$status" -eq 0 ]
     [ "$output" = "home-path ^tests/ ^$SYN_HOME$" ]
 }
+
+@test "PRIVACY_ALLOW refuses a | outside parentheses and a path ERE without ^" {
+    local bad
+    for bad in "home-path ^x/ ^$SYN_HOME\$|b\$" "home-path ^x/|^y/ ^$SYN_HOME\$" \
+        "home-path x/ ^$SYN_HOME\$"; do
+        write_config "PRIVACY_ALLOW=$bad"
+        run_conf --check "$FILE"
+        if [[ $status -ne 1 || $stderr != *"PRIVACY_ALLOW: expected"* ]]; then
+            printf 'not refused: %s\n%s\n' "$bad" "$stderr" >&2
+            return 1
+        fi
+    done
+    write_config "PRIVACY_ALLOW=home-path ^(x|y)/ ^$HOME_PREFIX(example-user|example-admin)\$" \
+        'PRIVACY_ALLOW=ipv4-private ^compose\.yaml$ ^172\.30\.0\.[0-9|]+$'
+    run_conf --check "$FILE"
+    [ "$status" -eq 0 ]
+}
+
+@test "--allow-lines prints the PRIVACY_ALLOW lines of a config that parses, and nothing otherwise" {
+    write_config "PRIVACY_ALLOW=home-path ^tests/ ^$SYN_HOME\$" PRIVACY_RULES=base
+    run_conf --allow-lines "$FILE"
+    [ "$status" -eq 0 ]
+    [ "$output" = 4 ]
+    write_config "PRIVACY_ALLOW=home-path ^tests/ $SYN_HOME\$"
+    run_conf --allow-lines "$FILE"
+    [ "$status" -eq 1 ]
+    [ -z "$output" ]
+}

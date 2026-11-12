@@ -2,7 +2,7 @@
 # type  profile  blob-id                                   mode    path[#block[@variant]]
 standard 1.0.0-dev
 file    all      3bc40e3a0435f7e6c4664ae04b778a6077e66c67  100755  .githooks/commit-msg
-file    all      177e87d21e4cbd204ab596188f1cf90aafdd8a06  100644  .githooks/lib.sh
+file    all      fc1b7c524fa164df3bbf7e741c9effbf4661b2cb  100644  .githooks/lib.sh
 file    all      dc2819d67877887e5edb98a391fda873d259bf7d  100755  .githooks/pre-commit
 file    all      a75b31ca1d9056f5487e50c0d1d262725236ce5f  100755  .githooks/pre-merge-commit
 file    all      8e96ce76818b15813fd8b42b0e9579abb55edd8a  100755  .githooks/pre-push
@@ -10,16 +10,16 @@ file    all      b6497c88dea1ee871656dbe49ae666dc82835fb2  100755  .githooks/pri
 file    all      21369350d2a093c67534d7ab14fe8f32a7c9568a  100644  .githooks/rules/base
 file    all      5973ac6d7de14e79548efc6ebdeeace4eec13fd1  100644  .githooks/rules/disk
 file    all      a34753f7f764dd463fe795f388a243da0b1fcf91  100644  .githooks/rules/vm
-file    all      8765a45be2ae1d59cae225f47a5f6701e04a7805  100755  .github/standard/bin/conf
+file    all      10855eccf189d0fc4261728856c321a07d879984  100755  .github/standard/bin/conf
 file    all      7fbc3f10e40d44f06a88b5aee302184dfea91d08  100755  .github/standard/bin/install-tools
 file    all      0c54235bea0321491803a51e12c1574373622fc4  100755  .github/standard/bin/no-skips
-file    all      d2432c4d98d401ad2285abbce0bb13158ff71119  100755  .github/standard/bin/standard-check
-file    all      eb2edbee733bc68054cf7b59b3f4e7639f0cccaa  100755  .github/standard/tests/conf.bats
+file    all      23c55f772941528f1b7c3bfc02ba7466da2af11f  100755  .github/standard/bin/standard-check
+file    all      41e134fd914f6a18c1eaa7992bbc3639327733fb  100755  .github/standard/tests/conf.bats
 file    all      a2f9cf029caab288af22ac6eaac2161a7c57a192  100755  .github/standard/tests/hooks.bats
 file    all      0db0093342eb5e914f4bdc110493903b90ee9cdf  100644  .github/standard/tests/lib.bash
 file    all      a0d3bd0dc77f28b1986e97cc32be9a7ef669291e  100755  .github/standard/tests/lint.bats
-file    all      4700df186ae58ad37616d1f1c109c588dd37618d  100755  .github/standard/tests/privacy-scan.bats
-file    all      bdac7d24044c126db4251184ce86d78b34f9bc3f  100755  .github/standard/tests/standard-check.bats
+file    all      d92d49cc50d1592ec7bcf58a4bb415f79e3b0355  100755  .github/standard/tests/privacy-scan.bats
+file    all      6f6aad4d67b5944771fba61aa1a0867c65b1c6e4  100755  .github/standard/tests/standard-check.bats
 file    all      4473cd6f2bab636e1d616909e3617925aed43812  100644  .shellcheckrc
 block   all      2a3c6440c39ac8ab19df09429194f307e138b027  -       .editorconfig#editorconfig
 block   all      ee7eb51cc6cb0bc0cd314d1389b502f4c0448d4a  -       .gitattributes#gitattributes

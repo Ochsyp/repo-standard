@@ -373,3 +373,51 @@ make_consumer() {
     [ "$status" -eq 1 ]
     [[ $stderr == *".githooks/rules/disk: names a private repository"* ]]
 }
+
+@test "a staged ROLE=source does not switch off the copy checks" {
+    make_consumer
+    write_config VISIBILITY=public PRIVACY_RULES=base ROLE=source
+    printf '# edited\n' >> "$REPO/.githooks/pre-push"
+    git -C "$REPO" add .github/standard.conf .githooks/pre-push
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *".githooks/pre-push: differs from the MANIFEST"* ]]
+}
+
+@test "--ci on a pull request: ROLE, MAX_BLOB_KB, RELEASE_KIND=legacy and a broken base are loosening" {
+    local base broken dir=$BATS_TEST_TMPDIR/repo
+    make_consumer
+    base=$(git -C "$REPO" rev-parse main)
+    export EVENT=pull_request
+    write_config VISIBILITY=public PRIVACY_RULES=base ROLE=source
+    printf '# edited\n' >> "$REPO/.githooks/pre-push"
+    git -C "$REPO" add .github/standard.conf .githooks/pre-push
+    commit_unchecked "chore: become the source"
+    BASE=$base HEAD_REF=feat/example HEAD_REPO=o/r REPO=o/r run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *".githooks/pre-push: differs from the MANIFEST"* ]]
+    [[ $stderr == *"a copy of the standard changes outside a chore/standard-* branch"* ]]
+    [[ $stderr == *"a changed ROLE"* ]]
+    git -C "$dir" switch -q -c feat/other "$base"
+    write_config VISIBILITY=public PRIVACY_RULES=base MAX_BLOB_KB=4096 RELEASE_KIND=legacy
+    git -C "$dir" add .github/standard.conf
+    commit_unchecked "chore: loosen"
+    BASE=$base HEAD_REF=feat/other HEAD_REPO=o/r REPO=o/r run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"a raised MAX_BLOB_KB"* ]]
+    [[ $stderr == *"RELEASE_KIND=legacy"* ]]
+    git -C "$dir" switch -q -c feat/broken "$base"
+    printf 'BOGUS=1\n' >> "$dir/.github/standard.conf"
+    git -C "$dir" add .github/standard.conf
+    commit_unchecked "chore: break the config"
+    broken=$(git -C "$dir" rev-parse HEAD)
+    write_config VISIBILITY=public PRIVACY_RULES=base
+    git -C "$dir" add .github/standard.conf
+    commit_unchecked "fix: mend the config"
+    BASE=$broken HEAD_REF=feat/broken HEAD_REPO=o/r REPO=o/r run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"a base config that does not parse"* ]]
+}

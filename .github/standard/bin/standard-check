@@ -136,10 +136,36 @@ if [ "$mode" = --ci ]; then
     esac
 fi
 
+# The config the change starts from: the merge base's on a pull request, HEAD's for --staged
+# and --local. Which checks run follows it too, so that a change cannot switch checks off on
+# its own: where the previous config says ROLE=consumer, the consumer checks run.
+prev=
+if [ "$mode" != --ci ]; then
+    git rev-parse -q --verify HEAD > /dev/null 2>&1 && prev=HEAD
+elif [ "${EVENT:-}" = pull_request ] && [ -n "${BASE:-}" ]; then
+    prev=$(git merge-base "$BASE" HEAD) || std_fail "cannot find the merge base"
+fi
+prev_state=none
+prev_role=
+if [ -n "$prev" ] && git cat-file -e "$prev:.github/standard.conf" 2> /dev/null; then
+    git cat-file blob "$prev:.github/standard.conf" > "$t/prev.conf" ||
+        std_fail "cannot read the previous .github/standard.conf"
+    if sh "$bin/conf" --print "$t/prev.conf" > "$t/prev.out" 2> /dev/null; then
+        prev_state=ok
+        prev_role=$(sed -n 's/^ROLE=//p' "$t/prev.out")
+    else
+        prev_state=broken
+    fi
+fi
+consumer=0
+if [ "$role" = consumer ] || [ "$prev_role" = consumer ]; then
+    consumer=1
+fi
+
 # Rules 2 to 4 for a repository that uses the standard: every copy and block of the selected
 # profiles as the MANIFEST lists it, and no file of the standard's folders beyond it.
 man=$(oid_of .github/standard/MANIFEST)
-if [ "$role" = consumer ]; then
+if [ "$consumer" -eq 1 ]; then
     if [ -z "$man" ]; then
         problem ".github/standard/MANIFEST: missing"
     else
@@ -338,7 +364,7 @@ if [ "$mode" = --ci ] && [ "${EVENT:-}" = pull_request ] && [ -n "${BASE:-}" ]; 
         std_fail "cannot list the changed files"
     same_repo=0
     [ -n "${HEAD_REPO:-}" ] && [ "${HEAD_REPO:-}" = "${REPO:-}" ] && same_repo=1
-    if [ "$role" = consumer ] && [ -n "$man" ]; then
+    if [ "$consumer" -eq 1 ] && [ -n "$man" ]; then
         copy=0
         if grep -q -x -F -e .github/standard/MANIFEST "$t/changed"; then
             copy=1
@@ -375,21 +401,33 @@ if [ "$mode" = --ci ] && [ "${EVENT:-}" = pull_request ] && [ -n "${BASE:-}" ]; 
             esac
         fi
     fi
-    if git cat-file -e "$mb:.github/standard.conf" 2> /dev/null; then
-        git cat-file blob "$mb:.github/standard.conf" > "$t/base.conf"
+    if [ "$prev_state" != none ]; then
         loosen=
-        if sh "$bin/conf" --print "$t/base.conf" > "$t/base.out" 2> /dev/null; then
+        if [ "$prev_state" = broken ]; then
+            # Without a base config to compare with, every change counts as loosening.
+            loosen="a base config that does not parse"
+        else
             loosen=$(awk '
                 function words(s, set,    n, w, i) { n = split(s, w, " "); for (i = 1; i <= n; i++) set[w[i]] = 1 }
-                FNR == NR { base[$0] = 1; if ($0 ~ /^PRIVACY_RULES=/) words(substr($0, 15), bp)
-                            if ($0 ~ /^CI_STAGES=/) words(substr($0, 11), bs); next }
+                FNR == NR {
+                    base[$0] = 1
+                    if ($0 ~ /^PRIVACY_RULES=/) words(substr($0, 15), bp)
+                    if ($0 ~ /^CI_STAGES=/) words(substr($0, 11), bs)
+                    if ($0 ~ /^ROLE=/) brole = substr($0, 6)
+                    if ($0 ~ /^MAX_BLOB_KB=/) bmax = substr($0, 13) + 0
+                    if ($0 ~ /^RELEASE_KIND=/) bkind = substr($0, 14)
+                    next
+                }
                 /^PRIVACY_(ALLOW|HISTORY_ACCEPT)=/ && !($0 in base) { print "an exemption or accept record"; next }
                 /^PRIVACY_RULES=/ { words(substr($0, 15), hp) }
                 /^CI_STAGES=/ { words(substr($0, 11), hs) }
+                /^ROLE=/ && substr($0, 6) != brole { print "a changed ROLE" }
+                /^MAX_BLOB_KB=/ && substr($0, 13) + 0 > bmax { print "a raised MAX_BLOB_KB" }
+                /^RELEASE_KIND=legacy$/ && bkind != "legacy" { print "RELEASE_KIND=legacy" }
                 END {
                     for (w in bp) if (!(w in hp)) print "a dropped rule pack"
                     for (w in bs) if (!(w in hs)) print "a dropped CI stage"
-                }' "$t/base.out" "$t/conf.out" | sort -u)
+                }' "$t/prev.out" "$t/conf.out" | sort -u)
         fi
         if grep -q -x -F -e .gitleaksignore "$t/changed"; then
             loosen="$loosen .gitleaksignore"

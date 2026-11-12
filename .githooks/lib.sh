@@ -504,16 +504,26 @@ scan_run() {
     fi
     set -- "$std_scan"/hit.*
     # A PRIVACY_ALLOW line of .github/standard.conf names the synthetic value it exempts, which
-    # conf has checked against realistic samples, so the rule packs skip those lines of the
-    # config; the denylist does not. Without this, no exemption could ever be committed.
+    # conf has checked against realistic samples, so the rule packs skip that line of the config;
+    # the denylist does not. Without this, no exemption could ever be committed. Only the lines
+    # that conf accepts count, only in a config blob that parses, and only at that path.
     : > "$std_scan/cfgallow"
     awk -F "$std_us" '$2 == ".github/standard.conf" && !(($1) in seen) { seen[$1] = 1; print $1 }' \
         "$std_scan/blobs" > "$std_scan/cfgoids" || std_fail "cannot list the config blobs"
     while read -r std_oid; do
         git cat-file blob "$std_oid" > "$std_scan/cfgblob" ||
             std_fail "cannot read .github/standard.conf"
-        awk -v us="$std_us" -v oid="$std_oid" '/^PRIVACY_ALLOW=/ { print oid us FNR }' \
-            "$std_scan/cfgblob" >> "$std_scan/cfgallow" || std_fail "cannot read .github/standard.conf"
+        std_status=0
+        sh "$std_conf" --allow-lines "$std_scan/cfgblob" > "$std_scan/cfglines" 2> /dev/null ||
+            std_status=$?
+        case $std_status in
+            0)
+                awk -v us="$std_us" -v oid="$std_oid" '{ print oid us $0 }' "$std_scan/cfglines" \
+                    >> "$std_scan/cfgallow" || std_fail "cannot read .github/standard.conf"
+                ;;
+            1) ;;
+            *) std_fail ".github/standard/bin/conf failed" ;;
+        esac
     done < "$std_scan/cfgoids"
     # Map each hit to its unit, in two passes over the hit files: the path names first, so that
     # every path whose name holds a hit is known before a content hit could show it. Writes
@@ -566,9 +576,12 @@ scan_run() {
                 hidden[line] = 1
                 emit(kind, "", nameof[line], "path name " line " of the scanned paths", value)
             } else if (id in bp) {
-                if (kind != "denylist" && ((id us line) in cfga)) next
                 c = split(substr(bp[id], 2), paths, us)
-                for (j = 1; j <= c; j++) emit(kind, id, paths[j], shown(paths[j]) ":" line, value)
+                for (j = 1; j <= c; j++) {
+                    if (kind != "denylist" && paths[j] == ".github/standard.conf" &&
+                        ((id us line) in cfga)) continue
+                    emit(kind, id, paths[j], shown(paths[j]) ":" line, value)
+                }
             } else if (utype[id] == "commit") {
                 emit(kind, id, "", "commit " ulabel[id] ", line " line " of git cat-file -p", value)
             } else if (utype[id] == "tag") {

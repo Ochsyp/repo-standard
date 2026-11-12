@@ -7,6 +7,7 @@
 #   conf --check [FILE|-]     exit 0 when FILE parses
 #   conf --get KEY [FILE|-]   print KEY's value or its default; a repeatable key one per line
 #   conf --print [FILE|-]     print every key as KEY=value, with the defaults filled in
+#   conf --allow-lines FILE   print the line number of each PRIVACY_ALLOW line, when FILE parses
 #   conf --defaults           print the defaults, for a repository without the file
 # FILE defaults to .github/standard.conf. Exit 0; 1 when the file does not parse, each problem on
 # stderr as "conf: line N: ..."; 2 when a check cannot run; 64 usage. A message never shows a
@@ -19,7 +20,7 @@ IMAGE_PLATFORMS RELEASE_KIND RELEASE_RUNNER RELEASE_MANIFEST RELEASE_ASSETS VERS
 PRIVACY_RULES PRIVACY_ALLOW PRIVACY_HISTORY_ACCEPT MAX_BLOB_KB"
 
 usage() {
-    echo "usage: conf --check [FILE|-] | --get KEY [FILE|-] | --print [FILE|-] | --defaults" >&2
+    echo "usage: conf --check [FILE|-] | --get KEY [FILE|-] | --print [FILE|-] | --allow-lines FILE | --defaults" >&2
     exit 64
 }
 
@@ -80,6 +81,7 @@ shift
 key=
 case $mode in
     --check | --print) [ "$#" -le 1 ] || usage ;;
+    --allow-lines) [ "$#" -eq 1 ] || usage ;;
     --get)
         [ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage
         key=$1
@@ -133,6 +135,32 @@ if [ "$mode" != --defaults ]; then
             }
             return 1
         }
+        # True when the ERE s holds a "|" outside parentheses and bracket expressions.
+        function bar(s,    n, i, c, depth, inb, first, j) {
+            n = length(s); depth = 0; inb = 0
+            for (i = 1; i <= n; i++) {
+                c = substr(s, i, 1)
+                if (inb) {
+                    if (c == "[" && substr(s, i + 1, 1) ~ /[:.=]/) {
+                        j = index(substr(s, i + 2), substr(s, i + 1, 1) "]")
+                        if (j == 0) return 1
+                        i += j + 2
+                        continue
+                    }
+                    if (c == "]" && !first) inb = 0
+                    first = 0
+                    continue
+                }
+                if (c == "\\") { i++; continue }
+                if (c == "[") {
+                    inb = 1; first = 1
+                    if (substr(s, i + 1, 1) == "^") i++
+                } else if (c == "(") depth++
+                else if (c == ")") depth--
+                else if (c == "|" && depth == 0) return 1
+            }
+            return 0
+        }
         # True for a relative path without . or .. segments.
         function relpath(p) {
             return p ~ /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/ && p !~ /(^|\/)\.\.?(\/|$)/
@@ -166,7 +194,7 @@ if [ "$mode" != --defaults ]; then
             form["RELEASE_ASSETS"] = "relative paths, each once"
             form["VERSION_COPY"] = "a relative path, |, and a line that holds X.Y.Z once"
             form["PRIVACY_RULES"] = "rule packs, each once"
-            form["PRIVACY_ALLOW"] = "KIND PATH-ERE VALUE-ERE: a rule kind (never denylist), and a value ERE anchored with ^ and $"
+            form["PRIVACY_ALLOW"] = "KIND PATH-ERE VALUE-ERE: a rule kind (never denylist), a path ERE that starts with ^, a value ERE anchored with ^ and $, neither with | outside parentheses"
             form["PRIVACY_HISTORY_ACCEPT"] = "a full commit SHA and a rule kind (never denylist)"
             form["MAX_BLOB_KB"] = "a whole number from 1 to 9999999"
             ctrl = sprintf("%c", 31)
@@ -206,9 +234,13 @@ if [ "$mode" != --defaults ]; then
             } else if (k == "PRIVACY_RULES") ok = words(v, packs)
             else if (k == "PRIVACY_ALLOW") {
                 a = index(v, " "); kind = substr(v, 1, a - 1); rest = substr(v, a + 1)
-                b = index(rest, " "); value = substr(rest, b + 1)
+                b = index(rest, " "); path = substr(rest, 1, b - 1); value = substr(rest, b + 1)
+                # Both EREs start with ^ and hold no "|" outside parentheses, and the value ERE
+                # ends with an unescaped $: an alternation could otherwise leave a branch
+                # unanchored, as in ^a$|b$.
                 ok = a > 1 && b > 1 && (kind in kinds) && kind != "denylist" && value != "" &&
-                    substr(value, 1, 1) == "^" && value ~ /\$$/ && value !~ /\\\$$/
+                    substr(path, 1, 1) == "^" && !bar(path) &&
+                    substr(value, 1, 1) == "^" && value ~ /\$$/ && value !~ /\\\$$/ && !bar(value)
             } else if (k == "PRIVACY_HISTORY_ACCEPT") {
                 c = split(v, w, " ")
                 ok = c == 2 && w[1] ~ /^[0-9a-f]+$/ && (length(w[1]) == 40 || length(w[1]) == 64) &&
@@ -251,6 +283,10 @@ if [ "$mode" != --defaults ]; then
     [ "$status" -eq 0 ] || exit 1
 fi
 [ "$mode" != --check ] || exit 0
+if [ "$mode" = --allow-lines ]; then
+    awk -F "$us" '$2 == "PRIVACY_ALLOW" { print $1 }' "$tmp/values" || fail "cannot read the config"
+    exit 0
+fi
 
 LC_ALL=C awk -F "$us" -v keys="$keys" -v want="$key" '
     BEGIN {
