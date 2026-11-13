@@ -48,6 +48,12 @@ All notable changes to this project are listed here. The format follows
   something, checks that accepted findings name old commits only, refuses `.gitleaks.toml` and
   ignores inline allow markers, and scans a pull request's or a push's commits, or the whole
   history, reporting counts and rule names only (phase 2)
+- The release tools: `release-prepare` writes a release pull request's `VERSION`, `VERSION_COPY`
+  files, CHANGELOG section and links and prints its body; `release-build` builds the archive
+  twice and compares the builds byte for byte, or writes the image kind's `image.json`;
+  `release-draft` drafts a release from the tip of `main` only, never over a published release
+  or a tag without one; `release-promote` gives an image's digest its version tag and `latest`;
+  and `release-verify` checks a published release without changing anything (phase 2)
 
 ### Changed
 
