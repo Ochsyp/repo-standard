@@ -37,6 +37,9 @@ All notable changes to this project are listed here. The format follows
 - `run-stage`, which runs a repository's `ci/<stage>` and then `ci/<stage>.ps1` under Windows
   PowerShell 5.1 from the top of the repository, with the helpers of the standard's tools in
   `bin/lib.bash` (phase 2)
+- `pr-text`, which refuses a pull request title that is not a Conventional Commit and runs
+  title and body through the hooks' privacy scan, its denylists only through their loader, and
+  `pr-title`, which checks the current title and body of a pull request in CI (phase 2)
 
 ### Changed
 

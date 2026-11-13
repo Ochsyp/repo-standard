@@ -458,3 +458,96 @@ synthetic() {
     [ "$status" -eq 2 ]
     [[ $stderr == *"an object to scan is missing"* ]]
 }
+
+# Run pr-text ARGS in $REPO through bats `run`, stderr apart; stdin passes through.
+run_pr_text() {
+    run --separate-stderr sh -c 'cd "$1" && shift && exec bash .github/standard/bin/pr-text "$@"' \
+        sh "$REPO" "$@"
+}
+
+@test "pr-text passes a Conventional Commit title, and refuses any other without showing it" {
+    local title
+    make_repo
+    write_denylist
+    printf 'Synthetic body.\n' > "$BATS_TEST_TMPDIR/body"
+    run_pr_text 'feat(conf): add a mode' "$BATS_TEST_TMPDIR/body"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    run_pr_text 'chore!: drop a key'
+    [ "$status" -eq 0 ]
+    for title in 'Add a mode' 'feat:no space' 'Feat: capital' 'feat(Conf): capital scope' \
+        'build: a type the workflow does not name'; do
+        run_pr_text "$title" "$BATS_TEST_TMPDIR/body"
+        [ "$status" -eq 1 ] || { printf 'passed: %s\n' "$title" >&2; return 1; }
+        [[ $stderr == *"the title is not a Conventional Commit"* ]]
+        [[ $stderr != *"$title"* ]]
+    done
+    run_pr_text
+    [ "$status" -eq 64 ]
+    run_pr_text 'docs: notes' "$BATS_TEST_TMPDIR/no-such-body"
+    [ "$status" -eq 2 ]
+}
+
+@test "pr-text refuses a denylist term in the body and a home path in the title, and shows neither" {
+    local home
+    make_repo
+    write_denylist
+    commit_config PRIVACY_RULES=base
+    printf 'Line one.\nSeen by %s.\n' "$DENY_TERM" > "$BATS_TEST_TMPDIR/body"
+    run_pr_text 'docs: notes' "$BATS_TEST_TMPDIR/body"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"message line 4: denylist"* ]]
+    refute_term_shown
+    home=$(printf '/%s/%s' home quuxly)
+    run_pr_text "fix: the path $home in a tool" - <<< 'A body on stdin.'
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"message line 1: home-path"* ]]
+    [[ $stderr != *quuxly* ]]
+}
+
+@test "pr-text reads the denylists only through the hooks' loader: a ~/ list, a BOM, a fullwidth at sign" {
+    make_repo
+    mkdir -p "$HOME/lists"
+    printf '\357\273\277%s\357\274\240example.invalid\n' "$DENY_TERM" > "$HOME/lists/extra"
+    git config --global privacy.denylist '~/lists/extra'
+    printf 'Contact %s@example.invalid for it.\n' "$DENY_TERM" > "$BATS_TEST_TMPDIR/body"
+    run_pr_text 'docs: contact' "$BATS_TEST_TMPDIR/body"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"message line 3: denylist"* ]]
+    refute_term_shown
+}
+
+@test "pr-title checks the current title and body of a pull request, read through gh" {
+    make_repo
+    write_denylist
+    stub_init
+    mkstub gh << STUB
+[[ -e "$BATS_TEST_TMPDIR/gh-fails" ]] && exit 1
+case "\$*" in
+    *"--jq .title"*) cat "$BATS_TEST_TMPDIR/title" ;;
+    *) cat "$BATS_TEST_TMPDIR/body" ;;
+esac
+STUB
+    printf 'Add a mode\n' > "$BATS_TEST_TMPDIR/title"
+    : > "$BATS_TEST_TMPDIR/body"
+    run --separate-stderr env PATH="$STUB_BIN:$PATH" GITHUB_REPOSITORY=example-owner/example \
+        GH_TOKEN=synthetic-token-value sh -c 'cd "$1" && exec bash .github/standard/bin/pr-title 7' sh "$REPO"
+    [ "$status" -eq 1 ]
+    [[ $(cat "$STUB_LOG") == *"repos/example-owner/example/pulls/7"* ]]
+    # Renamed in the browser, then the job runs again.
+    printf 'feat: add a mode\n' > "$BATS_TEST_TMPDIR/title"
+    run --separate-stderr env PATH="$STUB_BIN:$PATH" GITHUB_REPOSITORY=example-owner/example \
+        GH_TOKEN=synthetic-token-value sh -c 'cd "$1" && exec bash .github/standard/bin/pr-title 7' sh "$REPO"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    printf 'Seen by %s.\n' "$DENY_TERM" > "$BATS_TEST_TMPDIR/body"
+    run --separate-stderr env PATH="$STUB_BIN:$PATH" GITHUB_REPOSITORY=example-owner/example \
+        GH_TOKEN=synthetic-token-value sh -c 'cd "$1" && exec bash .github/standard/bin/pr-title 7' sh "$REPO"
+    [ "$status" -eq 1 ]
+    refute_term_shown
+    touch "$BATS_TEST_TMPDIR/gh-fails"
+    run --separate-stderr env PATH="$STUB_BIN:$PATH" GITHUB_REPOSITORY=example-owner/example \
+        GH_TOKEN=synthetic-token-value sh -c 'cd "$1" && exec bash .github/standard/bin/pr-title 7' sh "$REPO"
+    [ "$status" -eq 2 ]
+    [[ $output$stderr != *synthetic-token-value* ]]
+    run --separate-stderr sh -c 'cd "$1" && exec bash .github/standard/bin/pr-title seven' sh "$REPO"
+    [ "$status" -eq 64 ]
+}
