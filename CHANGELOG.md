@@ -40,6 +40,10 @@ All notable changes to this project are listed here. The format follows
 - `pr-text`, which refuses a pull request title that is not a Conventional Commit and runs
   title and body through the hooks' privacy scan, its denylists only through their loader, and
   `pr-title`, which checks the current title and body of a pull request in CI (phase 2)
+- `release-meta`, ported from image-backup with the launcher's version rules and the `-dev` rule,
+  which checks `VERSION`, `CHANGELOG.md` and the tags and tells whether a release is
+  unreleased, pending or released, and `changelog-entry`, which checks the lines a pull request
+  adds to `CHANGELOG.md`, with the exceptions for a release, a draft fix and Dependabot (phase 2)
 
 ### Changed
 
