@@ -83,6 +83,8 @@ All notable changes to this project are listed here. The format follows
   Gallery packages (phase 2)
 - `standard-check` names a `VERSION_COPY` problem by its entry, never by its path, and notes in
   CI when GitHub did not say whether the repository is private (phase 2)
+- `standard-check` also holds repo-standard's `templates/` to the private names, since
+  `tools/sync --init` copies them into a repository (phase 2)
 - `lint.bats` also finds an image without a digest in an `image=` option, and runs actionlint,
   which may report only the `ubuntu-26.04` runner label it does not know yet (phase 2)
 - repo-standard's CI runs `test` on Windows: `ci/test` runs the tests of `tools/` and the

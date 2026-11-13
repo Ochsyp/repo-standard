@@ -28,7 +28,7 @@ file    all      3d504d7817870445c8ec917dfb0f6e102d2b764e  100755  .github/stand
 file    all      ca6920304c4e2abd8491d5cda634358407433b5d  100755  .github/standard/bin/release-verify
 file    all      c51eace2dce1e43778a3d64fd6217d29fc369d9f  100755  .github/standard/bin/run-stage
 file    all      c47bfe96f2d655dcfd54aa7056b49eedf71814e6  100755  .github/standard/bin/secret-scan
-file    all      a38f13f03c3f1e645dea51997f91394aa52f45c8  100755  .github/standard/bin/standard-check
+file    all      e2badd06ab6d8937641428aef1e6823075229ec0  100755  .github/standard/bin/standard-check
 file    all      8de15312c9c7e1d01f5987acc12fe3c89f061917  100755  .github/standard/tests/conf.bats
 file    all      47c34405d4ac95610b48e2b1d648b41321e4be10  100755  .github/standard/tests/hooks.bats
 file    all      7d3beb2bf680a7b879863021a7c839e77f2b1dcd  100644  .github/standard/tests/lib.bash

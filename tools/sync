@@ -132,10 +132,15 @@ sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$src/config/private-names" | 
 names_one() {
     [[ -s $tmp/names ]] && grep -q -i -F -f "$tmp/names" -- "$1"
 }
-while read -r _ _ oid _ path; do
+while read -r type _ oid _ path; do
     git -C "$src" cat-file blob "$oid" > "$tmp/blob" || fail "cannot read the blob of $path"
     if names_one "$tmp/blob"; then
         refuse "$path names a private repository (config/private-names)"
+    fi
+    # --init may copy the template of a block's file, so that template is checked too.
+    if [[ $type == block ]] && (( init )) && [[ -f $src/templates/${path%%#*} ]] &&
+        names_one "$src/templates/${path%%#*}"; then
+        refuse "templates/${path%%#*} names a private repository (config/private-names)"
     fi
 done < "$tmp/entries"
 if (( init )); then

@@ -161,6 +161,20 @@ block_of() {
     [ -z "$(git -C "$TGT" status --porcelain)" ]
 }
 
+@test "sync --init refuses a template that names a private repository, before it writes anything" {
+    make_target NAME=example VISIBILITY=private RELEASE_KIND=legacy
+    printf 'example-private\n' >> "$SRC/config/private-names"
+    printf 'Ask example-private.\n' >> "$SRC/templates/SECURITY.md"
+    git -C "$SRC" add config/private-names templates/SECURITY.md
+    git -C "$SRC" -c core.hooksPath=no-hooks commit -q -m "chore: a template that names one"
+    git -C "$SRC" tag -f v1.0.0 > /dev/null
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"templates/SECURITY.md names a private repository"* ]]
+    [[ $stderr != *example-private* ]]
+    [ -z "$(git -C "$TGT" status --porcelain)" ]
+}
+
 @test "sync --init writes the copies with their modes, the blocks, the MANIFEST and the PR body" {
     local asset
     make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
