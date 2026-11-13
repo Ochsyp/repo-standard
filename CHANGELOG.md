@@ -34,6 +34,9 @@ All notable changes to this project are listed here. The format follows
 - `conf --ci`, which prints what CI runs (runners, stages, image, Windows hook tests, full
   suite, the jobs `all-passed` requires, public, rehearsal) for `$GITHUB_OUTPUT`, and
   `conf --samples`, which prints the realistic values of a pack kind (phase 2)
+- `run-stage`, which runs a repository's `ci/<stage>` and then `ci/<stage>.ps1` under Windows
+  PowerShell 5.1 from the top of the repository, with the helpers of the standard's tools in
+  `bin/lib.bash` (phase 2)
 
 ### Changed
 

@@ -512,3 +512,54 @@ STUB
     run_install_tools pwsh
     [ "$status" -eq 64 ]
 }
+
+# Run run-stage ARGS in the folder $1 of $REPO through bats `run`, stderr apart.
+run_stage_in() {
+    local dir=$1
+    shift
+    run --separate-stderr env PATH="${STUB_BIN:-/nonexistent}:$PATH" RUNNER_TEMP="$BATS_TEST_TMPDIR/runner" \
+        bash -c 'cd "$1" && shift && exec bash "$0" "$@"' "$REPO/.github/standard/bin/run-stage" "$dir" "$@"
+}
+
+@test "run-stage runs ci/STAGE from the top of the repository, and its status carries through" {
+    make_repo
+    mkdir -p "$REPO/ci" "$REPO/docs"
+    printf '#!/bin/sh\npwd > "%s/ran"\nexit 0\n' "$BATS_TEST_TMPDIR" > "$REPO/ci/test"
+    chmod +x "$REPO/ci/test"
+    run_stage_in "$REPO/docs" test
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(cat "$BATS_TEST_TMPDIR/ran")" = "$(cd "$REPO" && pwd)" ]
+    printf '#!/bin/sh\nexit 3\n' > "$REPO/ci/test"
+    run_stage_in "$REPO" test
+    [ "$status" -eq 3 ]
+    run_stage_in "$REPO" lint
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"this repository has no ci/lint or ci/lint.ps1"* ]]
+    run_stage_in "$REPO" deploy
+    [ "$status" -eq 64 ]
+}
+
+@test "run-stage runs ci/STAGE first, then ci/STAGE.ps1 under Windows PowerShell 5.1, only on Windows" {
+    make_repo
+    stub_init
+    mkdir -p "$REPO/ci"
+    printf '#!/bin/sh\necho bash >> "%s/order"\n' "$BATS_TEST_TMPDIR" > "$REPO/ci/system"
+    chmod +x "$REPO/ci/system"
+    printf 'Write-Output "synthetic"\r\n' > "$REPO/ci/system.ps1"
+    mkstub uname <<< 'echo Linux'
+    run_stage_in "$REPO" system
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"ci/system.ps1 needs Windows PowerShell 5.1"* ]]
+    mkstub uname <<< 'echo MINGW64_NT-10.0'
+    mkstub powershell << STUB
+echo powershell >> "$BATS_TEST_TMPDIR/order"
+printf '%s\n' "\$TEMP" "\$TMP" > "$BATS_TEST_TMPDIR/temp"
+STUB
+    : > "$BATS_TEST_TMPDIR/order"
+    POWERSHELL=powershell run_stage_in "$REPO" system
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(cat "$BATS_TEST_TMPDIR/order")" = "$(printf 'bash\npowershell')" ]
+    [[ $(cat "$STUB_LOG") == *"powershell -NoProfile -ExecutionPolicy Bypass -File "*"system.ps1"* ]]
+    [ "$(awk 'END { print NR }' "$BATS_TEST_TMPDIR/temp")" -eq 2 ]
+    [[ $(head -n 1 "$BATS_TEST_TMPDIR/temp") == *runner* ]]
+}
