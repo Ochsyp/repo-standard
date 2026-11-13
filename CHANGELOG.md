@@ -54,6 +54,10 @@ All notable changes to this project are listed here. The format follows
   `release-draft` drafts a release from the tip of `main` only, never over a published release
   or a tag without one; `release-promote` gives an image's digest its version tag and `latest`;
   and `release-verify` checks a published release without changing anything (phase 2)
+- The standard's workflows: `ci` (the `standard` job, the `lint`, `test` and `system` stages,
+  `image`, `hooks-windows` and the `all-passed` gate), `secret-scan`, `release` (dry run, checks,
+  build, attestation, draft, promote, verify) and `image`, with `actions.allow` and
+  `workflows.bats`, which holds them to the pin, permission, token and contract rules (phase 2)
 
 ### Changed
 
@@ -62,5 +66,7 @@ All notable changes to this project are listed here. The format follows
   Gallery packages (phase 2)
 - `standard-check` names a `VERSION_COPY` problem by its entry, never by its path, and notes in
   CI when GitHub did not say whether the repository is private (phase 2)
+- `lint.bats` also finds an image without a digest in an `image=` option, and runs actionlint,
+  which may report only the `ubuntu-26.04` runner label it does not know yet (phase 2)
 
 [Unreleased]: https://github.com/Ochsyp/repo-standard/commits/main
