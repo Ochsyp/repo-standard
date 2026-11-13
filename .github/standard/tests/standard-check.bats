@@ -448,3 +448,49 @@ make_consumer() {
     [ "$status" -eq 1 ]
     [[ $stderr == *".github/standard.conf: missing"* ]]
 }
+
+# Run install-tools ARGS through bats `run`, stderr apart, with RUNNER_TEMP in the test's folder.
+run_install_tools() {
+    run --separate-stderr env RUNNER_TEMP="$BATS_TEST_TMPDIR/runner" \
+        bash "$REPO_ROOT/.github/standard/bin/install-tools" "$@"
+}
+
+@test "install-tools prints its bin folder, and in Actions adds it to GITHUB_PATH as well" {
+    local tools=$BATS_TEST_TMPDIR/runner/tools
+    stub_init
+    # A bats clone already in place, which git reports at the pinned commit.
+    mkdir -p "$tools/bats-core-1.13.0/bin"
+    printf '#!/bin/bash\necho "Bats 1.13.0"\n' > "$tools/bats-core-1.13.0/bin/bats"
+    chmod +x "$tools/bats-core-1.13.0/bin/bats"
+    mkstub git <<< 'echo 3bca150ec86275d6d9d5a4fd7d48ab8b6c6f3d87'
+    PATH="$STUB_BIN:$PATH" run_install_tools bats
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$output" = "$tools/bin" ]
+    : > "$BATS_TEST_TMPDIR/github-path"
+    PATH="$STUB_BIN:$PATH" GITHUB_PATH="$BATS_TEST_TMPDIR/github-path" run_install_tools bats
+    [ "$status" -eq 0 ]
+    [ "$output" = "$tools/bin" ]
+    [ "$(awk 'END { print NR }' "$BATS_TEST_TMPDIR/github-path")" -eq 1 ]
+}
+
+@test "install-tools installs the PowerShell modules only on Windows, from a download that matches its pin" {
+    stub_init
+    mkstub uname <<< 'echo Linux'
+    PATH="$STUB_BIN:$PATH" run_install_tools pester
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"pester is pinned for Windows PowerShell 5.1 only"* ]]
+    mkstub uname <<< 'echo MINGW64_NT-10.0'
+    # A download of other bytes than the pinned package.
+    mkstub curl << 'STUB'
+while (( $# )); do
+    if [[ $1 == --output ]]; then printf 'other bytes\n' > "$2"; break; fi
+    shift
+done
+STUB
+    PATH="$STUB_BIN:$PATH" run_install_tools psscriptanalyzer
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"does not match its pinned SHA-256"* ]]
+    [[ $(cat "$STUB_LOG") == *"api/v2/package/PSScriptAnalyzer/1.25.0"* ]]
+    run_install_tools pwsh
+    [ "$status" -eq 64 ]
+}
