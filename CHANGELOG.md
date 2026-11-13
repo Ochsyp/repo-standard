@@ -25,12 +25,10 @@ All notable changes to this project are listed here. The format follows
   bodies in `blocks/`, and the bats suites `hooks.bats`, `privacy-scan.bats`, `conf.bats`,
   `standard-check.bats`, `lint.bats`, `tests/manifest.bats` and `tests/source-check.bats` with
   their `lib.bash` (phase 1)
-- A temporary `bootstrap` workflow that runs the suites on Linux and in Git Bash on Windows
-  (phase 1)
 - `tools/consumer-suite`, which builds a scratch consumer of a public (MIT, tar) or a private
   (no licence, legacy) shape that holds only what the MANIFEST vendors plus a file of its own;
-  `bootstrap` runs the standard's suites in one of each, so a vendored test that needs a file
-  only this repository holds, or scans a consumer's own files, fails in CI (phase 1)
+  CI runs the standard's suites in one of each, so a vendored test that needs a file only this
+  repository holds, or scans a consumer's own files, fails in CI (phase 1)
 - `conf --ci`, which prints what CI runs (runners, stages, image, Windows hook tests, full
   suite, the jobs `all-passed` requires, public, rehearsal) for `$GITHUB_OUTPUT`, and
   `conf --samples`, which prints the realistic values of a pack kind (phase 2)
