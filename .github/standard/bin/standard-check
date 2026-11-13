@@ -138,6 +138,13 @@ if [ "$mode" = --ci ]; then
     case ${PRIVATE:-}:$visibility in
         true:public) problem ".github/standard.conf: VISIBILITY=public, but GitHub says private" ;;
         false:private) problem ".github/standard.conf: VISIBILITY=private, but GitHub says public" ;;
+        :*)
+            case ${EVENT:-} in
+                pull_request | push)
+                    notice "GitHub did not say whether this repository is private, so VISIBILITY was not compared"
+                    ;;
+            esac
+            ;;
     esac
 fi
 
@@ -265,16 +272,20 @@ else
         version=
     fi
 fi
+# Each entry is named by its place among the VERSION_COPY lines, never by its path: a config
+# committed with the hooks off could name a path that holds a term.
+entry=0
 while IFS= read -r copy; do
     [ -n "$version" ] || break
+    entry=$((entry + 1))
     path=${copy%%|*}
     line=${copy#*|}
     want=$(printf '%s\n' "$line" | sed "s/X\.Y\.Z/$version/")
     po=$(oid_of "$path")
     if [ -z "$po" ]; then
-        problem "$path: missing (VERSION_COPY)"
+        problem "VERSION_COPY entry $entry: its file is missing"
     elif ! git cat-file blob "$po" | grep -q -x -F -e "$want"; then
-        problem "$path: does not hold the VERSION_COPY line for $version"
+        problem "VERSION_COPY entry $entry: its file does not hold the line for $version"
     fi
 done < "$t/version-copy"
 do=$(oid_of .github/dependabot.yml)

@@ -31,5 +31,16 @@ All notable changes to this project are listed here. The format follows
   (no licence, legacy) shape that holds only what the MANIFEST vendors plus a file of its own;
   `bootstrap` runs the standard's suites in one of each, so a vendored test that needs a file
   only this repository holds, or scans a consumer's own files, fails in CI (phase 1)
+- `conf --ci`, which prints what CI runs (runners, stages, image, Windows hook tests, full
+  suite, the jobs `all-passed` requires, public, rehearsal) for `$GITHUB_OUTPUT`, and
+  `conf --samples`, which prints the realistic values of a pack kind (phase 2)
+
+### Changed
+
+- `install-tools` prints the folder of its tools every time, so a script can use them in the
+  same step, and on Windows installs Pester and PSScriptAnalyzer from their pinned PowerShell
+  Gallery packages (phase 2)
+- `standard-check` names a `VERSION_COPY` problem by its entry, never by its path, and notes in
+  CI when GitHub did not say whether the repository is private (phase 2)
 
 [Unreleased]: https://github.com/Ochsyp/repo-standard/commits/main

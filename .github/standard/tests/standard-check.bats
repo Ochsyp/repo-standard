@@ -202,11 +202,29 @@ make_consumer() {
     write_config VISIBILITY=public PRIVACY_RULES=base 'VERSION_COPY=version.txt|version=X.Y.Z'
     git -C "$REPO" add VERSION version.txt .github/standard.conf
     check --staged
-    [[ $stderr == *"version.txt: does not hold the VERSION_COPY line for 1.1.0-dev"* ]]
+    # Named by its place in the config, never by its path, which a commit made with the hooks
+    # off could have filled with a term.
+    [[ $stderr == *"VERSION_COPY entry 1: its file does not hold the line for 1.1.0-dev"* ]]
+    [[ $stderr != *version.txt* ]]
+    git -C "$REPO" rm -q --cached version.txt
+    check --staged
+    [[ $stderr == *"VERSION_COPY entry 1: its file is missing"* ]]
     printf 'version=1.1.0-dev\n' > "$REPO/version.txt"
     git -C "$REPO" add version.txt
     check --staged
     [ "$status" -eq 0 ]
+}
+
+@test "--ci notes on a push when GitHub did not say whether the repository is private" {
+    make_consumer
+    EVENT=push run --separate-stderr sh -c 'cd "$1" && exec sh .github/standard/bin/standard-check --ci' \
+        sh "$REPO"
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"notice: GitHub did not say whether this repository is private"* ]]
+    EVENT=push PRIVATE=false run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$REPO"
+    [ "$status" -eq 0 ]
+    [[ $stderr != *"did not say"* ]]
 }
 
 @test "dependabot.yml needs the github-actions entry for / at limit 0" {

@@ -9,9 +9,26 @@
 #   conf --print [FILE|-]     print every key as KEY=value, with the defaults filled in
 #   conf --allow-lines FILE   print "LINE KIND" for each PRIVACY_ALLOW line, when FILE parses
 #   conf --defaults           print the defaults, for a repository without the file
+#   conf --ci [FILE]          print what CI runs, as lowercase key=value lines for $GITHUB_OUTPUT;
+#                             run it from the top of the checkout (it reads the MANIFEST and git)
+#   conf --samples KIND       print the realistic values of a pack kind that the checks use
 # FILE defaults to .github/standard.conf. Exit 0; 1 when the file does not parse, each problem on
 # stderr as "conf: line N: ..."; 2 when a check cannot run; 64 usage. A message never shows a
 # value from the file.
+#
+# --ci reads EVENT (github.event_name), WORKFLOW (github.workflow: "release" when release.yml
+# calls ci.yml), PRIVATE (github.event.repository.private), BASE (the pull request's base, or a
+# push's before) and REHEARSE (the release dispatch input). It prints:
+#   runner, release-runner   the labels of CI_RUNNER and RELEASE_RUNNER
+#   stages, lint, test, system   the stages that run: none on schedule unless CI_WEEKLY=yes
+#   python, ps-modules, platforms (IMAGE_PLATFORMS joined with commas), kind (RELEASE_KIND)
+#   image      IMAGE_PLATFORMS is set, the workflow is ci, and the stages run
+#   windows    hooks-windows runs: a public repository or the source, never on schedule
+#   full-suite the whole vendored suite runs: public or source, schedule or dispatch, or a change
+#              between BASE and HEAD to a path the MANIFEST lists (or one that cannot be told)
+#   required   the jobs besides standard that all-passed requires
+#   public     the config says public and GitHub agrees
+#   rehearse   an image dispatch asked for a rehearsal
 set -eu
 
 # The keys, in the order --print prints them.
@@ -20,7 +37,7 @@ IMAGE_PLATFORMS RELEASE_KIND RELEASE_RUNNER RELEASE_MANIFEST RELEASE_ASSETS VERS
 PRIVACY_RULES PRIVACY_ALLOW PRIVACY_HISTORY_ACCEPT MAX_BLOB_KB"
 
 usage() {
-    echo "usage: conf --check [FILE|-] | --get KEY [FILE|-] | --print [FILE|-] | --allow-lines FILE | --defaults" >&2
+    echo "usage: conf --check [FILE|-] | --get KEY [FILE|-] | --print [FILE|-] | --allow-lines FILE | --defaults | --ci [FILE] | --samples KIND" >&2
     exit 64
 }
 
@@ -80,8 +97,13 @@ mode=$1
 shift
 key=
 case $mode in
-    --check | --print) [ "$#" -le 1 ] || usage ;;
+    --check | --print | --ci) [ "$#" -le 1 ] || usage ;;
     --allow-lines) [ "$#" -eq 1 ] || usage ;;
+    --samples)
+        [ "$#" -eq 1 ] || usage
+        samples "$1" | grep . || exit 1
+        exit 0
+        ;;
     --get)
         [ "$#" -ge 1 ] && [ "$#" -le 2 ] || usage
         key=$1
@@ -323,29 +345,121 @@ if [ "$mode" = --allow-lines ]; then
     exit 0
 fi
 
-LC_ALL=C awk -F "$us" -v keys="$keys" -v want="$key" '
-    BEGIN {
-        n = split(keys, order, /[ \n]+/)
-        repeat["VERSION_COPY"] = repeat["PRIVACY_ALLOW"] = repeat["PRIVACY_HISTORY_ACCEPT"] = 1
-        d["ROLE"] = "consumer"; d["LICENSE"] = "MIT"; d["CI_RUNNER"] = "ubuntu"
-        d["CI_STAGES"] = "test"; d["CI_WEEKLY"] = "no"; d["RELEASE_RUNNER"] = "ubuntu"
-        d["MAX_BLOB_KB"] = "1024"
-    }
-    {
-        if ($2 in repeat) list[$2] = list[$2] (want == "" ? $2 "=" : "") $3 "\n"
-        else { val[$2] = $3; set[$2] = 1 }
-    }
-    END {
-        if (!("RELEASE_MANIFEST" in set) && val["NAME"] != "") {
-            val["RELEASE_MANIFEST"] = val["NAME"] "-release.json"
-            set["RELEASE_MANIFEST"] = 1
+# Print the value of key $1 with its default, or every key as KEY=value when $1 is empty.
+print_values() {
+    LC_ALL=C awk -F "$us" -v keys="$keys" -v want="$1" '
+        BEGIN {
+            n = split(keys, order, /[ \n]+/)
+            repeat["VERSION_COPY"] = repeat["PRIVACY_ALLOW"] = repeat["PRIVACY_HISTORY_ACCEPT"] = 1
+            d["ROLE"] = "consumer"; d["LICENSE"] = "MIT"; d["CI_RUNNER"] = "ubuntu"
+            d["CI_STAGES"] = "test"; d["CI_WEEKLY"] = "no"; d["RELEASE_RUNNER"] = "ubuntu"
+            d["MAX_BLOB_KB"] = "1024"
         }
-        for (i = 1; i <= n; i++) {
-            k = order[i]
-            if (want != "" && k != want) continue
-            v = (k in set) ? val[k] : d[k]
-            if (k in repeat) printf "%s", list[k]
-            else if (want != "") print v
-            else print k "=" v
+        {
+            if ($2 in repeat) list[$2] = list[$2] (want == "" ? $2 "=" : "") $3 "\n"
+            else { val[$2] = $3; set[$2] = 1 }
         }
-    }' "$tmp/values" || fail "cannot print the config"
+        END {
+            if (!("RELEASE_MANIFEST" in set) && val["NAME"] != "") {
+                val["RELEASE_MANIFEST"] = val["NAME"] "-release.json"
+                set["RELEASE_MANIFEST"] = 1
+            }
+            for (i = 1; i <= n; i++) {
+                k = order[i]
+                if (want != "" && k != want) continue
+                v = (k in set) ? val[k] : d[k]
+                if (k in repeat) printf "%s", list[k]
+                else if (want != "") print v
+                else print k "=" v
+            }
+        }' "$tmp/values"
+}
+
+if [ "$mode" != --ci ]; then
+    print_values "$key" || fail "cannot print the config"
+    exit 0
+fi
+
+# --ci from here on.
+print_values "" > "$tmp/print" || fail "cannot print the config"
+
+# The value of key $1, which does not repeat.
+val() {
+    awk -v k="$1" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' "$tmp/print"
+}
+
+# The runner label of a CI_RUNNER or RELEASE_RUNNER value.
+label() {
+    case $1 in
+        windows) echo windows-2025 ;;
+        *) echo ubuntu-26.04 ;;
+    esac
+}
+
+# Exit 0 when the change from $BASE to HEAD touches a path the MANIFEST lists (a copy, the file
+# of a block, or the MANIFEST itself), or when that cannot be told: no BASE, an all-zero one (a
+# first push), one this clone does not hold, or no MANIFEST.
+vendored_change() {
+    [ -n "${BASE:-}" ] || return 0
+    [ -n "$(printf '%s' "$BASE" | tr -d 0)" ] || return 0
+    git cat-file -e "$BASE^{commit}" 2> /dev/null || return 0
+    [ -f .github/standard/MANIFEST ] || return 0
+    git -c core.quotePath=false diff --name-only --no-renames "$BASE" HEAD > "$tmp/changed" \
+        2> /dev/null || return 0
+    awk 'NR == FNR {
+            if (($1 == "file" || $1 == "block") && NF == 5) { p = $5; sub(/#.*/, "", p); listed[p] = 1 }
+            next
+        }
+        $0 == ".github/standard/MANIFEST" || ($0 in listed) { found = 1 }
+        END { exit !found }' .github/standard/MANIFEST "$tmp/changed"
+}
+
+event=${EVENT:-}
+visibility=$(val VISIBILITY)
+role=$(val ROLE)
+kind=$(val RELEASE_KIND)
+platforms=$(val IMAGE_PLATFORMS | tr ' ' ',')
+stages=
+if [ "$event" != schedule ] || [ "$(val CI_WEEKLY)" = yes ]; then
+    stages=$(val CI_STAGES)
+fi
+lint=false
+test=false
+system=false
+for stage in $stages; do
+    case $stage in
+        lint) lint=true ;;
+        test) test=true ;;
+        system) system=true ;;
+    esac
+done
+image=false
+if [ -n "$platforms" ] && [ "${WORKFLOW:-}" = ci ] &&
+    { [ "$event" != schedule ] || [ "$(val CI_WEEKLY)" = yes ]; }; then
+    image=true
+fi
+windows=false
+if [ "$event" != schedule ] && { [ "$visibility" = public ] || [ "$role" = source ]; }; then
+    windows=true
+fi
+full=false
+if [ "$role" = source ] || [ "$visibility" = public ] || [ "$event" = schedule ] ||
+    [ "$event" = workflow_dispatch ] || vendored_change; then
+    full=true
+fi
+required=$stages
+[ "$image" = false ] || required="${required:+$required }image"
+[ "$windows" = false ] || required="${required:+$required }hooks-windows"
+public=false
+if [ "$visibility" = public ] && [ "${PRIVATE:-}" = false ]; then
+    public=true
+fi
+rehearse=false
+if [ "$kind" = image ] && [ "$event" = workflow_dispatch ] && [ "${REHEARSE:-}" = true ]; then
+    rehearse=true
+fi
+printf '%s\n' "runner=$(label "$(val CI_RUNNER)")" "stages=$stages" "lint=$lint" "test=$test" \
+    "system=$system" "python=$(val PYTHON)" "ps-modules=$(val PS_MODULES)" \
+    "platforms=$platforms" "image=$image" "windows=$windows" "full-suite=$full" \
+    "required=$required" "kind=$kind" "release-runner=$(label "$(val RELEASE_RUNNER)")" \
+    "public=$public" "rehearse=$rehearse"
