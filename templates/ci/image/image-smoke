@@ -1,0 +1,11 @@
+#!/bin/bash
+# ci/image-smoke starter for the image kind: image.yml runs it once per platform of
+# IMAGE_PLATFORMS with IMAGE-REF PLATFORM, after it built and loaded that image. Replace the check
+# with what proves this image works; the starter only requires that it starts and prints its
+# version.
+set -euo pipefail
+if [[ $# -ne 2 ]]; then
+    echo "usage: ci/image-smoke IMAGE-REF PLATFORM" >&2
+    exit 64
+fi
+docker run --rm --platform "$2" "$1" --version

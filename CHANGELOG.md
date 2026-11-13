@@ -66,6 +66,10 @@ All notable changes to this project are listed here. The format follows
   PSScriptAnalyzer (phase 2)
 - Tests that no copy and no block names the repository's owner, `LICENSE` aside, and that
   `bats --count` honours `--filter-tags` (phase 2)
+- `templates/`, the starters of an adoption: a config that shows every key, `CHANGELOG.md`,
+  `CONTRIBUTING.md` and `SECURITY.md` with the markers of their blocks, `tests/helpers.bash`, and
+  `ci/` starters for shell, PowerShell, Python and the image kind, each checked by
+  `tests/templates.bats` (phase 2)
 
 ### Changed
 

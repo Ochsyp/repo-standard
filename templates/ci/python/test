@@ -1,0 +1,10 @@
+#!/bin/bash
+# ci/test starter for a Python repository: the unittest suites in tests/, under the Python that
+# PYTHON in the config sets up. A skipped test fails the run, as CI requires.
+set -euo pipefail
+log=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/unittest.log
+python -m unittest discover -s tests -v 2>&1 | tee "$log"
+if grep -q -E 'skipped=[1-9]' "$log"; then
+    echo "ci/test: a test was skipped, and CI runs every test" >&2
+    exit 1
+fi

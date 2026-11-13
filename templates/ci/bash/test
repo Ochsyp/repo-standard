@@ -1,0 +1,10 @@
+#!/bin/bash
+# ci/test starter for a shell repository: the bats suites in tests/, with the pinned bats that
+# install-tools installs, then no-skips, so CI fails on any failed or skipped test.
+set -euo pipefail
+PATH=$(.github/standard/bin/install-tools bats):$PATH
+tap=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/tests.tap
+status=0
+bats --tap tests/ | tee "$tap" || status=1
+.github/standard/bin/no-skips "$tap" || status=1
+exit "$status"
