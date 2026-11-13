@@ -141,8 +141,10 @@ unpinned_images() {
     local message
     need command actionlint
     # actionlint 1.7.12 does not know that runner label; ci.yml ignores exactly that error.
+    # actionlint turns each \n of a -format string into a line feed before it parses the template,
+    # so the line feed stands outside the template's actions.
     run --separate-stderr sh -c 'cd "$1" && exec actionlint -no-color -format "$2"' sh "$REPO_ROOT" \
-        '{{range $err := .}}{{$err.Message}}{{"\n"}}{{end}}'
+        '{{range $err := .}}{{$err.Message}}\n{{end}}'
     [ "$status" -le 1 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     while IFS= read -r message; do
         [[ -z $message || $message == 'label "ubuntu-26.04" is unknown'* ]] ||

@@ -32,7 +32,7 @@ file    all      a38f13f03c3f1e645dea51997f91394aa52f45c8  100755  .github/stand
 file    all      8de15312c9c7e1d01f5987acc12fe3c89f061917  100755  .github/standard/tests/conf.bats
 file    all      47c34405d4ac95610b48e2b1d648b41321e4be10  100755  .github/standard/tests/hooks.bats
 file    all      7d3beb2bf680a7b879863021a7c839e77f2b1dcd  100644  .github/standard/tests/lib.bash
-file    all      a674164d658581f6e7276daf3afd964da99ace4d  100755  .github/standard/tests/lint.bats
+file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
 file    all      50919f5229d0d3cc1b6ffd3c4b188b01ba6421e7  100755  .github/standard/tests/privacy-scan.bats
 file    all      5206d58bc74058c9fbaae3f17857e9b671adb618  100755  .github/standard/tests/release-meta.bats
 file    all      9a86b4893e5706de10b1207f04c33387466ac69b  100755  .github/standard/tests/release-tools.bats
