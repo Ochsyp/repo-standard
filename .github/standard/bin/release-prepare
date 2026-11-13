@@ -116,12 +116,14 @@ else
     range="v$latest..HEAD"
 fi
 updates=$(git log --format='- %s' --author='dependabot\[bot\]' "$range")
+since=${latest:+v$latest}
+since=${since:-the start}
 cat << EOF
 ## What and why
 
 Release $new. Its notes are the [$new] section of CHANGELOG.md.
 
-Dependency updates since ${latest:+v$latest}${latest:-the start}:
+Dependency updates since $since:
 ${updates:-- none}
 
 ## Phase

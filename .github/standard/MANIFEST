@@ -23,7 +23,7 @@ file    all      7b2b55a74c0b26df52dace15aecdec7874f57501  100755  .github/stand
 file    all      b67686feca114254debdf422fbbd4f16c2724889  100755  .github/standard/bin/release-build
 file    all      54aacf1df7bf820872c0febc158ce18dce5516e2  100755  .github/standard/bin/release-draft
 file    all      5ce08e7574548c5ee428a3f64ad8bb66b6b539c8  100755  .github/standard/bin/release-meta
-file    all      5ed35b8bbabd9d59586f6df95a9a4b5426c21b5e  100755  .github/standard/bin/release-prepare
+file    all      bbce0cf9a49ebc69c7b065c1c5b98d95f31a98a6  100755  .github/standard/bin/release-prepare
 file    all      3d504d7817870445c8ec917dfb0f6e102d2b764e  100755  .github/standard/bin/release-promote
 file    all      ca6920304c4e2abd8491d5cda634358407433b5d  100755  .github/standard/bin/release-verify
 file    all      c51eace2dce1e43778a3d64fd6217d29fc369d9f  100755  .github/standard/bin/run-stage
@@ -35,7 +35,7 @@ file    all      7d3beb2bf680a7b879863021a7c839e77f2b1dcd  100644  .github/stand
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
 file    all      50919f5229d0d3cc1b6ffd3c4b188b01ba6421e7  100755  .github/standard/tests/privacy-scan.bats
 file    all      5206d58bc74058c9fbaae3f17857e9b671adb618  100755  .github/standard/tests/release-meta.bats
-file    all      9a86b4893e5706de10b1207f04c33387466ac69b  100755  .github/standard/tests/release-tools.bats
+file    all      26f85652750889e2ec819904e8b2ef33bc8d33d5  100755  .github/standard/tests/release-tools.bats
 file    all      8b54937d8ea46d0a68b6dc597ff56c2fca84528c  100755  .github/standard/tests/secret-scan.bats
 file    all      101e402edd3e8f4b9f75615b1ddd7c98f6fc8b90  100755  .github/standard/tests/standard-check.bats
 file    all      0dc7bf3a939fcbe91f4e89701b19d8374d0f9698  100755  .github/standard/tests/stub-bin/docker

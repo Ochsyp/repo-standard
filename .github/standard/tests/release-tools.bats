@@ -71,6 +71,7 @@ release_repo() {
     tool release-prepare 1.0.0
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $output == *"## What and why"* && $output == *"Release 1.0.0"* ]]
+    [[ $output == *$'\nDependency updates since the start:\n'* ]]
     [ "$(cat "$REPO/VERSION")" = 1.0.0 ]
     grep -q -x -F "## [1.0.0] - $(date -u +%F)" "$REPO/CHANGELOG.md"
     grep -q -x -F 'Each version is the GitHub release `vX.Y.Z`.' "$REPO/CHANGELOG.md"
@@ -98,7 +99,7 @@ release_repo() {
     commit_all "fix: a fix"
     tool release-prepare 1.1.0
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
-    [[ $output == *"ci: bump an action"* ]]
+    [[ $output == *$'\nDependency updates since v1.0.0:\n- ci: bump an action\n'* ]]
     [ "$(cat "$REPO/version.txt")" = "version = 1.1.0" ]
     grep -q -x -F "[Unreleased]: $URL/compare/v1.1.0...HEAD" "$REPO/CHANGELOG.md"
     grep -q -x -F "[1.1.0]: $URL/compare/v1.0.0...v1.1.0" "$REPO/CHANGELOG.md"
