@@ -17,7 +17,7 @@ file    all      c11cccce8c02c866d3cb77bd698a0204da1cf96b  100755  .github/stand
 file    all      1fcffe49a338fcf15930e3e4153d52832531c21f  100755  .github/standard/bin/conf
 file    all      0dd9d2bce88cbe1af44ee7455463170c8d365e9d  100755  .github/standard/bin/install-tools
 file    all      1efffa291d7661ae34c4e7e1bc4cb3a959f9bd6d  100644  .github/standard/bin/lib.bash
-file    all      0c54235bea0321491803a51e12c1574373622fc4  100755  .github/standard/bin/no-skips
+file    all      896c9969b818ba9bdbb300858c3fe95058849a25  100755  .github/standard/bin/no-skips
 file    all      0cfb2b62c2520808cbd839c13ac4cb1373b1c4ad  100755  .github/standard/bin/pr-text
 file    all      7b2b55a74c0b26df52dace15aecdec7874f57501  100755  .github/standard/bin/pr-title
 file    all      b67686feca114254debdf422fbbd4f16c2724889  100755  .github/standard/bin/release-build
@@ -37,7 +37,7 @@ file    all      50919f5229d0d3cc1b6ffd3c4b188b01ba6421e7  100755  .github/stand
 file    all      5206d58bc74058c9fbaae3f17857e9b671adb618  100755  .github/standard/tests/release-meta.bats
 file    all      26f85652750889e2ec819904e8b2ef33bc8d33d5  100755  .github/standard/tests/release-tools.bats
 file    all      8b54937d8ea46d0a68b6dc597ff56c2fca84528c  100755  .github/standard/tests/secret-scan.bats
-file    all      101e402edd3e8f4b9f75615b1ddd7c98f6fc8b90  100755  .github/standard/tests/standard-check.bats
+file    all      4b3f1f61d80540219b6f450530d8960db2482211  100755  .github/standard/tests/standard-check.bats
 file    all      0dc7bf3a939fcbe91f4e89701b19d8374d0f9698  100755  .github/standard/tests/stub-bin/docker
 file    all      461517c4e31b6dfdbc9bfc33dee0af424bd48051  100755  .github/standard/tests/stub-bin/gh
 file    all      b9229271396615e2fab9ef1720eeaac20a4bb26f  100755  .github/standard/tests/stub-bin/gitleaks

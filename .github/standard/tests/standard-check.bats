@@ -521,6 +521,43 @@ run_stage_in() {
         bash -c 'cd "$1" && shift && exec bash "$0" "$@"' "$REPO/.github/standard/bin/run-stage" "$dir" "$@"
 }
 
+@test "no-skips passes a full run, and fails on a skip, a failure, a short run, no plan and no test" {
+    local d=$BATS_TEST_TMPDIR bad
+    printf '%s\n' '1..2' 'ok 1 one' 'ok 2 two' > "$d/good.tap"
+    printf '%s\n' '1..2' 'ok 1 one' 'ok 2 two # skip it needs a tool' > "$d/skip.tap"
+    printf '%s\n' '1..2' 'ok 1 one' 'not ok 2 two' > "$d/fail.tap"
+    printf '%s\n' '1..3' 'ok 1 one' 'ok 2 two' > "$d/short.tap"
+    printf '%s\n' 'ok 1 one' > "$d/noplan.tap"
+    printf '%s\n' '1..0' > "$d/empty.tap"
+    run sh "$REPO_ROOT/.github/standard/bin/no-skips" "$d/good.tap"
+    [ "$status" -eq 0 ]
+    for bad in skip fail short noplan empty; do
+        run sh "$REPO_ROOT/.github/standard/bin/no-skips" "$d/good.tap" "$d/$bad.tap"
+        [ "$status" -eq 1 ] || { printf '%s passed\n' "$bad" >&2; return 1; }
+    done
+    run sh "$REPO_ROOT/.github/standard/bin/no-skips" "$d/missing.tap"
+    [ "$status" -eq 2 ]
+}
+
+@test "no-skips names each file as it was given, backslashes and all" {
+    local dir file
+    # A Windows runner hands out paths such as D:\a\_temp; elsewhere a folder of that name.
+    if command -v cygpath > /dev/null 2>&1; then
+        dir=$BATS_TEST_TMPDIR/tap
+        mkdir -p "$dir"
+        file="$(cygpath -w "$dir")\\a.tap"
+    else
+        dir=$BATS_TEST_TMPDIR/'D:\a\_temp'
+        mkdir -p "$dir"
+        file=$dir/a.tap
+    fi
+    printf '1..1\nok 1 one\n' > "$file"
+    run --separate-stderr sh "$REPO_ROOT/.github/standard/bin/no-skips" "$file"
+    [ "$status" -eq 0 ]
+    [ "$output" = "no-skips: $file: 1 test(s), 0 skipped, 0 failed" ]
+    [ -z "$stderr" ]
+}
+
 @test "run-stage runs ci/STAGE from the top of the repository, and its status carries through" {
     make_repo
     mkdir -p "$REPO/ci" "$REPO/docs"
@@ -528,7 +565,9 @@ run_stage_in() {
     chmod +x "$REPO/ci/test"
     run_stage_in "$REPO/docs" test
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
-    [ "$(cat "$BATS_TEST_TMPDIR/ran")" = "$(cd "$REPO" && pwd)" ]
+    # The same folder, however its path is written: on a Windows runner bash reaches it through
+    # /tmp and a short 8.3 name, while run-stage enters the long path that git prints.
+    [ "$(cat "$BATS_TEST_TMPDIR/ran")" -ef "$REPO" ]
     printf '#!/bin/sh\nexit 3\n' > "$REPO/ci/test"
     run_stage_in "$REPO" test
     [ "$status" -eq 3 ]
