@@ -49,6 +49,8 @@ head_of() {
     # The control first, with the scan's flags; then the scan, over the pull request's commits.
     [ "$(grep -c '^gitleaks ' "$STUB_LOG")" -eq 2 ]
     [ "$(grep -c -e '--redact' "$STUB_LOG")" -eq 2 ]
+    # An inline allow marker in a scanned commit would hide its line; gitleaks must ignore it.
+    [ "$(grep -c -e '--ignore-gitleaks-allow' "$STUB_LOG")" -eq 2 ]
     grep -q -F -e "--log-opts=$BASE..$(head_of)" "$STUB_LOG"
     commit_file notes.txt "$(printf 'seen at %s.%s.%s.%s' 192 168 7 9)"
     scan_event EVENT=pull_request BASE="$BASE" HEAD="$(head_of)"

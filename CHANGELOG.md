@@ -45,9 +45,9 @@ All notable changes to this project are listed here. The format follows
   unreleased, pending or released, and `changelog-entry`, which checks the lines a pull request
   adds to `CHANGELOG.md`, with the exceptions for a release, a draft fix and Dependabot (phase 2)
 - `secret-scan`, which proves with positive controls that gitleaks and the rule packs still find
-  something, checks that accepted findings name old commits only, refuses `.gitleaks.toml`, and
-  scans a pull request's or a push's commits, or the whole history, reporting counts and rule
-  names only (phase 2)
+  something, checks that accepted findings name old commits only, refuses `.gitleaks.toml` and
+  ignores inline allow markers, and scans a pull request's or a push's commits, or the whole
+  history, reporting counts and rule names only (phase 2)
 
 ### Changed
 
