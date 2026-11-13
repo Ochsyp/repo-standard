@@ -81,6 +81,9 @@ All notable changes to this project are listed here. The format follows
   release note in mirrors of its own; once per run the pins' advisories and newer releases, and
   token expiry. It prints one `<repo> <check> ok|warn|FAIL <reason>` line per check, never a
   path or a term, and its `gh` wrapper only reads (phase 2)
+- repo-standard's own `CONTRIBUTING.md`, with the workflow, guard-rails and releasing blocks and
+  its sections Checks, Test data, Changing the standard and Release contract, and `SECURITY.md`,
+  with the reporting and automated-checks blocks and its trust model (phase 2)
 
 ### Changed
 

@@ -26,13 +26,20 @@ edits the copies; `.github/standard/MANIFEST` lists them.
 - `tools/manifest`: writes `.github/standard/MANIFEST`. `tools/consumer-suite`: builds a scratch
   consumer, of a public or a private shape, that holds only what the MANIFEST vendors plus files
   of its own, where CI runs the standard's suites again. `tests/` holds the tests of `tools/`.
+- `tools/sync`: writes a published release into a repository's worktree, run from a clone of
+  its tag; `--init` adopts a repository. `tools/status`: the read-only daily audit of the
+  repositories.
+- `templates/`: the starters of an adoption: the config, CHANGELOG.md, CONTRIBUTING.md,
+  SECURITY.md, tests/helpers.bash and ci/ per stack.
 - `ci/test` and `ci/test.ps1` (Windows) and `ci/system` (Linux): this repository's CI stages.
+- CONTRIBUTING.md and SECURITY.md: how this repository is changed and released, and its trust
+  model.
 
 ## Status
 
-Phase 1 (hooks and checks) is merged. Phase 2 comes in three pull requests: the workflows, the
-vendored tools and the secret scan; then `tools/sync`, `tools/status` and the templates; then
-the release of version 1.0.0.
+Phase 1 (hooks and checks) and the first pull request of phase 2 (the workflows, the vendored
+tools and the secret scan) are merged. The second brings `tools/sync`, `tools/status` and the
+templates; the third releases version 1.0.0.
 
 ## Checks
 
