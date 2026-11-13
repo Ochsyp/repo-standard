@@ -17,8 +17,8 @@ run_manifest() {
     run --separate-stderr sh -c 'cd "$1" && shift && exec sh tools/manifest "$@"' sh "$REPO" "$@"
 }
 
-# A source repository at $REPO, all staged: the hooks and bin/ as copies, three workflows, a
-# LICENSE, VERSION, three block bodies and tools/manifest itself.
+# A source repository at $REPO, all staged: the hooks and bin/ as copies, four workflows, a
+# LICENSE, VERSION, four block bodies and tools/manifest itself.
 make_source() {
     make_repo
     printf '1.0.0-dev\n' > "$REPO/VERSION"
@@ -27,6 +27,7 @@ make_source() {
         "$REPO/blocks/_gitattributes" "$REPO/tools"
     printf 'name: ci\n' > "$REPO/.github/workflows/ci.yml"
     printf 'name: release\n' > "$REPO/.github/workflows/release.yml"
+    printf 'name: image\n' > "$REPO/.github/workflows/image.yml"
     printf 'name: bootstrap\n' > "$REPO/.github/workflows/bootstrap.yml"
     printf 'Report to the maintainer.\n' > "$REPO/blocks/SECURITY.md/reporting@private.md"
     printf 'Release in the browser.\n' > "$REPO/blocks/CONTRIBUTING.md/releasing.md"
@@ -116,10 +117,32 @@ has_entry() {
     [ "$status" -eq 0 ]
 }
 
-@test "this repository's MANIFEST matches its files" {
-    REPO=$REPO_ROOT
-    run_manifest --check
-    [ "$status" -eq 0 ]
+# Compare the MANIFEST of the repository $1 with one that tools/manifest rebuilds from its index,
+# the workflow lines aside. A Dependabot pull request moves an action's SHA in a canonical
+# workflow and cannot rebuild the MANIFEST; standard-check (rule 9) holds the release pull request
+# to the whole MANIFEST, so the next release carries the move.
+manifest_matches_but_workflows() {
+    local rebuilt
+    rebuilt=$(cd "$1" && sh tools/manifest --print) || return 2
+    diff <(grep -v -E '[[:space:]]\.github/workflows/' <<< "$rebuilt") \
+        <(grep -v -E '[[:space:]]\.github/workflows/' "$1/.github/standard/MANIFEST")
+}
+
+@test "this repository's MANIFEST matches its files, the workflow lines aside" {
+    run manifest_matches_but_workflows "$REPO_ROOT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+}
+
+@test "the MANIFEST check leaves out a moved workflow, and nothing else" {
+    source_with_manifest
+    printf 'name: ci\non: push\n' > "$REPO/.github/workflows/ci.yml"
+    git -C "$REPO" add .github/workflows/ci.yml
+    run manifest_matches_but_workflows "$REPO"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    printf '# a local edit\n' >> "$REPO/.github/standard/bin/conf"
+    git -C "$REPO" add .github/standard/bin/conf
+    run manifest_matches_but_workflows "$REPO"
+    [ "$status" -eq 1 ]
 }
 
 @test "tools/consumer-suite builds a consumer that holds only what the MANIFEST vendors" {
@@ -128,17 +151,25 @@ has_entry() {
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $output == "consumer-suite: "*" file(s) and "*" block(s) of standard "* ]]
     git -C "$dest" ls-files -s > "$BATS_TEST_TMPDIR/files"
-    # Each file entry with the blob and the mode the MANIFEST names.
+    # Each file entry with the blob and the mode the consumer's MANIFEST names, which equals the
+    # one rebuilt from this repository's index.
+    run sh -c 'cd "$1" && exec sh tools/manifest --print' sh "$REPO_ROOT"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cat "$dest/.github/standard/MANIFEST")" ]
     while read -r type _ oid mode path; do
         [[ $type == file ]] || continue
         grep -q -x -F "$mode $oid 0"$'\t'"$path" "$BATS_TEST_TMPDIR/files" ||
             { printf '%s is not %s %s in the consumer\n' "$path" "$mode" "$oid" >&2; return 1; }
-    done < "$REPO_ROOT/.github/standard/MANIFEST"
-    # Nothing that only repo-standard holds.
-    run grep -E -e $'\t(blocks|tools|tests)/' \
-        -e $'\t(VERSION|README\\.md|CHANGELOG\\.md|\\.github/workflows/bootstrap\\.yml)$' \
-        "$BATS_TEST_TMPDIR/files"
+    done < "$dest/.github/standard/MANIFEST"
+    # Nothing that only repo-standard holds; VERSION and CHANGELOG.md are the consumer's own.
+    run grep -E -e $'\t(blocks|tools|tests|config)/' \
+        -e $'\t(README\\.md|\\.github/workflows/bootstrap\\.yml)$' "$BATS_TEST_TMPDIR/files"
     [ "$status" -eq 1 ]
+    [ "$(cat "$dest/VERSION")" = 0.1.0-dev ]
+    [ "$(git -C "$dest" rev-parse :CHANGELOG.md)" != "$(git -C "$REPO_ROOT" rev-parse :CHANGELOG.md)" ]
+    run bash -c 'cd "$1" && git tag --list "v*" | bash .github/standard/bin/release-meta check' sh "$dest"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    [[ $output == *"state=unreleased"* ]]
     # The blocks between their markers, ci/test executable, ci/test.ps1 checked out with CRLF.
     [[ $(head -n 1 "$dest/.gitattributes") == "# standard:begin gitattributes" ]]
     grep -q -x -F '<!-- standard:begin reporting -->' "$dest/SECURITY.md"
@@ -195,10 +226,19 @@ run_consumer_suite() {
     run_consumer_suite --shape private "$priv"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $output == *", private shape" ]]
-    # private: no LICENSE, a release workflow of its own, the private block, no releasing block.
+    # private: no LICENSE, release workflows of its own, the private block, no releasing block.
+    # Its own release.yml and image.yml are workflows the general rules accept, and image.yml is
+    # callable as ci.yml calls it.
     [ ! -e "$priv/LICENSE" ]
     [ "$(git -C "$priv" rev-parse :.github/workflows/release.yml)" != \
         "$(git -C "$REPO" rev-parse :.github/workflows/release.yml)" ]
+    grep -q -x 'permissions:' "$priv/.github/workflows/release.yml"
+    grep -q 'timeout-minutes:' "$priv/.github/workflows/release.yml"
+    grep -q -x '  workflow_call:' "$priv/.github/workflows/image.yml"
+    grep -q -x '      push:' "$priv/.github/workflows/image.yml"
+    grep -q 'timeout-minutes:' "$priv/.github/workflows/image.yml"
+    [ -f "$pub/CHANGELOG.md" ] && [ -f "$priv/CHANGELOG.md" ]
+    [ "$(cat "$pub/VERSION")" = 0.1.0-dev ] && [ "$(cat "$priv/VERSION")" = 0.1.0-dev ]
     grep -q -x -F '<!-- standard:begin reporting -->' "$priv/SECURITY.md"
     [ ! -e "$priv/CONTRIBUTING.md" ]
     [ "$(sh "$priv/.github/standard/bin/conf" --get RELEASE_KIND "$priv/.github/standard.conf")" = legacy ]
@@ -206,7 +246,19 @@ run_consumer_suite() {
     [ -f "$pub/docs/fstab.example" ] && [ -f "$priv/docs/fstab.example" ]
 }
 
-@test "tools/consumer-suite stops on a MANIFEST line that does not parse, and keeps DEST in place" {
+@test "tools/consumer-suite builds from the tree, so a moved workflow ships as the release will" {
+    local new
+    source_with_manifest
+    printf 'name: ci\non: push\n' > "$REPO/.github/workflows/ci.yml"
+    git -C "$REPO" add .github/workflows/ci.yml
+    new=$(git -C "$REPO" rev-parse :.github/workflows/ci.yml)
+    run_consumer_suite "$BATS_TEST_TMPDIR/moved"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(git -C "$BATS_TEST_TMPDIR/moved" rev-parse :.github/workflows/ci.yml)" = "$new" ]
+    grep -q -F " $new " "$BATS_TEST_TMPDIR/moved/.github/standard/MANIFEST"
+}
+
+@test "tools/consumer-suite stops when tools/manifest cannot rebuild the MANIFEST, and keeps DEST in place" {
     source_with_manifest
     # A relative DEST under an exported CDPATH, and MSYS_NO_PATHCONV, which in Git Bash keeps the
     # paths git gets from being converted.
@@ -214,17 +266,29 @@ run_consumer_suite() {
         sh "$REPO"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [ -n "$(git -C "$REPO/rel" ls-files)" ]
-    printf 'file all 0123 100644 a b\n' >> "$REPO/.github/standard/MANIFEST"
-    git -C "$REPO" add .github/standard/MANIFEST
+    printf '#!/bin/sh\n' > "$REPO/.github/standard/bin/my tool"
+    git -C "$REPO" add -- '.github/standard/bin/my tool'
     run_consumer_suite "$BATS_TEST_TMPDIR/bad"
     [ "$status" -eq 2 ]
-    [[ $stderr == *"the MANIFEST line "*" does not parse"* ]]
+    [[ $stderr == *"tools/manifest cannot rebuild the MANIFEST"* ]]
 }
 
 # bats test_tags=lint
-@test "ShellCheck reports nothing in tools/, ci/ and tests/" {
+@test "ShellCheck reports nothing in the shell scripts that git tracks in tools/, ci/ and tests/" {
+    local -a paths=()
+    local path first
     need command shellcheck
-    run_shellcheck tools/manifest tools/consumer-suite ci/test tests/helpers.bash \
-        tests/manifest.bats tests/source-check.bats
+    while IFS= read -r path; do
+        case $path in
+            *.bash | *.bats) paths+=("$path"); continue ;;
+        esac
+        first=
+        IFS= read -r first < "$REPO_ROOT/$path" || true
+        case $first in
+            '#!/bin/sh'* | '#!/bin/bash'* | '#!/usr/bin/env bash'*) paths+=("$path") ;;
+        esac
+    done < <(git -C "$REPO_ROOT" ls-files -- tools ci tests)
+    (( ${#paths[@]} >= 7 ))
+    run_shellcheck "${paths[@]}"
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
 }

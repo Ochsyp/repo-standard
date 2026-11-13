@@ -25,11 +25,66 @@ All notable changes to this project are listed here. The format follows
   bodies in `blocks/`, and the bats suites `hooks.bats`, `privacy-scan.bats`, `conf.bats`,
   `standard-check.bats`, `lint.bats`, `tests/manifest.bats` and `tests/source-check.bats` with
   their `lib.bash` (phase 1)
-- A temporary `bootstrap` workflow that runs the suites on Linux and in Git Bash on Windows
-  (phase 1)
 - `tools/consumer-suite`, which builds a scratch consumer of a public (MIT, tar) or a private
   (no licence, legacy) shape that holds only what the MANIFEST vendors plus a file of its own;
-  `bootstrap` runs the standard's suites in one of each, so a vendored test that needs a file
-  only this repository holds, or scans a consumer's own files, fails in CI (phase 1)
+  CI runs the standard's suites in one of each, so a vendored test that needs a file only this
+  repository holds, or scans a consumer's own files, fails in CI (phase 1)
+- `conf --ci`, which prints what CI runs (runners, stages, image, Windows hook tests, full
+  suite, the jobs `all-passed` requires, public, rehearsal) for `$GITHUB_OUTPUT`, and
+  `conf --samples`, which prints the realistic values of a pack kind (phase 2)
+- `run-stage`, which runs a repository's `ci/<stage>` and then `ci/<stage>.ps1` under Windows
+  PowerShell 5.1 from the top of the repository, with the helpers of the standard's tools in
+  `bin/lib.bash` (phase 2)
+- `pr-text`, which refuses a pull request title that is not a Conventional Commit and runs
+  title and body through the hooks' privacy scan, its denylists only through their loader, and
+  `pr-title`, which checks the current title and body of a pull request in CI (phase 2)
+- `release-meta`, the release checks that came before the standard, with the launcher's version
+  rules and the `-dev` rule, which checks `VERSION`, `CHANGELOG.md` and the tags and tells
+  whether a release is unreleased, pending or released, and `changelog-entry`, which checks the
+  lines a pull request adds to `CHANGELOG.md`, with the exceptions for a release, a draft fix and
+  Dependabot (phase 2)
+- `secret-scan`, which proves with positive controls that gitleaks and the rule packs still find
+  something, checks that accepted findings name old commits only, refuses `.gitleaks.toml` and
+  ignores inline allow markers, and scans a pull request's or a push's commits, or the whole
+  history, reporting counts and rule names only (phase 2)
+- The release tools: `release-prepare` writes a release pull request's `VERSION`, `VERSION_COPY`
+  files, CHANGELOG section and links and prints its body; `release-build` builds the archive
+  twice and compares the builds byte for byte, or writes the image kind's `image.json`;
+  `release-draft` drafts a release from the tip of `main` only, never over a published release
+  or a tag without one; `release-promote` gives an image's digest its version tag and `latest`;
+  and `release-verify` checks a published release without changing anything (phase 2)
+- The standard's workflows: `ci` (the `standard` job, the `lint`, `test` and `system` stages,
+  `image`, `hooks-windows` and the `all-passed` gate), `secret-scan`, `release` (dry run, checks,
+  build, attestation, draft, promote, verify) and `image`, with `actions.allow` and
+  `workflows.bats`, which holds them to the pin, permission, token and contract rules (phase 2)
+- repo-standard's own `LICENSE` (the MIT text of the standard's repositories),
+  `.github/dependabot.yml` with the active `github-actions` entry, the pull request template,
+  `.github/standard/README.md`, and `config/private-names`, the private repositories that no
+  copy or block may name (phase 2)
+- `ci/system`, the Linux stage: the tests of `tools/`, then the standard's suites, lint included,
+  in both scratch consumers; and `ci/test.ps1`, a smoke test of the pinned Pester and
+  PSScriptAnalyzer (phase 2)
+- Tests that no copy and no block names the repository's owner, `LICENSE` aside, and that
+  `bats --count` honours `--filter-tags` (phase 2)
+
+### Changed
+
+- `install-tools` prints the folder of its tools every time, so a script can use them in the
+  same step, and on Windows installs Pester and PSScriptAnalyzer from their pinned PowerShell
+  Gallery packages (phase 2)
+- `standard-check` names a `VERSION_COPY` problem by its entry, never by its path, and notes in
+  CI when GitHub did not say whether the repository is private (phase 2)
+- `lint.bats` also finds an image without a digest in an `image=` option, and runs actionlint,
+  which may report only the `ubuntu-26.04` runner label it does not know yet (phase 2)
+- repo-standard's CI runs `test` on Windows: `ci/test` runs the tests of `tools/` and the
+  standard's suites in Git Bash, the lint aside, and `ci/system` runs the scratch consumers on
+  Linux; the config sets `CI_RUNNER=windows`, `CI_STAGES=test system` and `PS_MODULES` (phase 2)
+- `tools/consumer-suite` builds from the tree with `tools/manifest --print`, and gives each
+  consumer a `VERSION` and a `CHANGELOG.md`, and the private shape release workflows of its own
+  that the general rules accept (phase 2)
+- `tests/manifest.bats` lints every shell script that git tracks in `tools/`, `ci/` and
+  `tests/`, and leaves the workflow lines out of the MANIFEST self-check, so a Dependabot pull
+  request passes; `standard-check` still holds the release pull request to the whole MANIFEST
+  (phase 2)
 
 [Unreleased]: https://github.com/Ochsyp/repo-standard/commits/main

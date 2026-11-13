@@ -266,3 +266,124 @@ MAX_BLOB_KB=1024" ]
     run_conf --check "$FILE"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
 }
+
+# Run conf --ci in $REPO through bats `run` with the event settings in the environment that come
+# as arguments (EVENT=... WORKFLOW=...), stderr apart.
+run_ci() {
+    run --separate-stderr env "$@" sh -c 'cd "$1" && exec sh "$2" --ci' sh "$REPO" "$CONF"
+}
+
+# Print the value of output KEY of the last run_ci.
+out() {
+    awk -v k="$1" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' <<< "$output"
+}
+
+@test "--ci prints the jobs of a public consumer on a pull request, as lowercase key=value lines" {
+    write_config VISIBILITY=public 'CI_STAGES=lint test' PYTHON=3.13 'PS_MODULES=pester' \
+        'IMAGE_PLATFORMS=linux/amd64 linux/arm64'
+    run_ci EVENT=pull_request WORKFLOW=ci PRIVATE=false
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(out runner)" = ubuntu-26.04 ]
+    [ "$(out stages)" = "lint test" ]
+    [ "$(out lint)" = true ] && [ "$(out test)" = true ] && [ "$(out system)" = false ]
+    [ "$(out python)" = 3.13 ]
+    [ "$(out ps-modules)" = pester ]
+    [ "$(out platforms)" = linux/amd64,linux/arm64 ]
+    [ "$(out image)" = true ]
+    [ "$(out windows)" = true ]
+    [ "$(out full-suite)" = true ]
+    [ "$(out required)" = "lint test image hooks-windows" ]
+    [ "$(out kind)" = tar ]
+    [ "$(out release-runner)" = ubuntu-26.04 ]
+    [ "$(out public)" = true ]
+    [ "$(out rehearse)" = false ]
+    run grep -v -E '^[a-z][a-z-]*=' <<< "$output"
+    [ "$status" -eq 1 ]
+}
+
+@test "--ci runs the stages and the image on schedule only with CI_WEEKLY=yes, and hooks-windows never" {
+    write_config VISIBILITY=public 'CI_STAGES=test system' 'IMAGE_PLATFORMS=linux/amd64'
+    run_ci EVENT=schedule WORKFLOW=ci PRIVATE=false
+    [ "$(out stages)" = "" ]
+    [ "$(out test)" = false ] && [ "$(out system)" = false ] && [ "$(out image)" = false ]
+    [ "$(out windows)" = false ]
+    [ "$(out full-suite)" = true ]
+    [ "$(out required)" = "" ]
+    write_config VISIBILITY=public 'CI_STAGES=test system' 'IMAGE_PLATFORMS=linux/amd64' CI_WEEKLY=yes
+    run_ci EVENT=schedule WORKFLOW=ci PRIVATE=false
+    [ "$(out stages)" = "test system" ]
+    [ "$(out required)" = "test system image" ]
+    [ "$(out windows)" = false ]
+}
+
+@test "--ci maps the runners, builds no image for release.yml, and sets public and rehearse narrowly" {
+    write_config VISIBILITY=public CI_RUNNER=windows RELEASE_RUNNER=windows 'IMAGE_PLATFORMS=linux/amd64'
+    run_ci EVENT=push WORKFLOW=release PRIVATE=true
+    [ "$(out runner)" = windows-2025 ]
+    [ "$(out release-runner)" = windows-2025 ]
+    [ "$(out image)" = false ]
+    # A config that says public in a repository GitHub calls private is not public.
+    [ "$(out public)" = false ]
+    write_config VISIBILITY=private RELEASE_KIND=image 'IMAGE_PLATFORMS=linux/amd64'
+    run_ci EVENT=workflow_dispatch WORKFLOW=release PRIVATE=true REHEARSE=true
+    [ "$(out rehearse)" = true ]
+    [ "$(out windows)" = false ]
+    run_ci EVENT=workflow_dispatch WORKFLOW=release PRIVATE=true REHEARSE=false
+    [ "$(out rehearse)" = false ]
+    write_config VISIBILITY=private RELEASE_KIND=tar
+    run_ci EVENT=workflow_dispatch WORKFLOW=release PRIVATE=true REHEARSE=true
+    [ "$(out rehearse)" = false ]
+}
+
+@test "--ci runs the full suite of a private repository only for a change to what the MANIFEST lists" {
+    local base oid
+    make_repo
+    commit_config VISIBILITY=private
+    stage .githooks/x '# synthetic copy'
+    oid=$(git -C "$REPO" rev-parse :.githooks/x)
+    stage .github/standard/MANIFEST "$(printf 'standard 1.0.0\nfile all %s 100644 .githooks/x\nblock private %s - SECURITY.md#reporting@private' "$oid" "$oid")"
+    stage SECURITY.md 'synthetic'
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "chore: adopt"
+    base=$(git -C "$REPO" rev-parse HEAD)
+    stage notes.txt 'own file'
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "docs: notes"
+    run_ci EVENT=pull_request WORKFLOW=ci PRIVATE=true BASE="$base"
+    [ "$(out full-suite)" = false ]
+    [ "$(out windows)" = false ]
+    stage .githooks/x '# changed copy'
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "chore: change a copy"
+    run_ci EVENT=pull_request WORKFLOW=ci PRIVATE=true BASE="$base"
+    [ "$(out full-suite)" = true ]
+    git -C "$REPO" switch -q -c docs/other "$base"
+    stage SECURITY.md 'changed block target'
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "docs: security"
+    run_ci EVENT=push WORKFLOW=ci PRIVATE=true BASE="$base"
+    [ "$(out full-suite)" = true ]
+    # A first push, whose before is all zeros, cannot tell what changed.
+    run_ci EVENT=push WORKFLOW=ci PRIVATE=true BASE=0000000000000000000000000000000000000000
+    [ "$(out full-suite)" = true ]
+    git -C "$REPO" switch -q -c docs/own "$base"
+    run_ci EVENT=workflow_dispatch WORKFLOW=ci PRIVATE=true BASE="$base"
+    [ "$(out full-suite)" = true ]
+}
+
+@test "--ci prints nothing on stdout for a config that does not parse, also under dash" {
+    local shell
+    write_config 'BOGUS=1'
+    for shell in sh dash; do
+        command -v "$shell" > /dev/null 2>&1 || continue
+        run --separate-stderr env EVENT=push "$shell" -c 'cd "$1" && exec "$2" "$3" --ci' sh "$REPO" "$shell" "$CONF"
+        [ "$status" -eq 1 ]
+        [ -z "$output" ]
+    done
+}
+
+@test "--samples prints realistic values of a kind, and fails for a kind it does not know" {
+    run_conf --samples ipv4-private
+    [ "$status" -eq 0 ]
+    [ "$(awk 'END { print NR }' <<< "$output")" -ge 2 ]
+    run_conf --samples no-such-kind
+    [ "$status" -eq 1 ]
+    run_conf --samples
+    [ "$status" -eq 64 ]
+}

@@ -202,11 +202,29 @@ make_consumer() {
     write_config VISIBILITY=public PRIVACY_RULES=base 'VERSION_COPY=version.txt|version=X.Y.Z'
     git -C "$REPO" add VERSION version.txt .github/standard.conf
     check --staged
-    [[ $stderr == *"version.txt: does not hold the VERSION_COPY line for 1.1.0-dev"* ]]
+    # Named by its place in the config, never by its path, which a commit made with the hooks
+    # off could have filled with a term.
+    [[ $stderr == *"VERSION_COPY entry 1: its file does not hold the line for 1.1.0-dev"* ]]
+    [[ $stderr != *version.txt* ]]
+    git -C "$REPO" rm -q --cached version.txt
+    check --staged
+    [[ $stderr == *"VERSION_COPY entry 1: its file is missing"* ]]
     printf 'version=1.1.0-dev\n' > "$REPO/version.txt"
     git -C "$REPO" add version.txt
     check --staged
     [ "$status" -eq 0 ]
+}
+
+@test "--ci notes on a push when GitHub did not say whether the repository is private" {
+    make_consumer
+    EVENT=push run --separate-stderr sh -c 'cd "$1" && exec sh .github/standard/bin/standard-check --ci' \
+        sh "$REPO"
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"notice: GitHub did not say whether this repository is private"* ]]
+    EVENT=push PRIVATE=false run --separate-stderr sh -c \
+        'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$REPO"
+    [ "$status" -eq 0 ]
+    [[ $stderr != *"did not say"* ]]
 }
 
 @test "dependabot.yml needs the github-actions entry for / at limit 0" {
@@ -447,4 +465,140 @@ make_consumer() {
     check --staged
     [ "$status" -eq 1 ]
     [[ $stderr == *".github/standard.conf: missing"* ]]
+}
+
+# Run install-tools ARGS through bats `run`, stderr apart, with RUNNER_TEMP in the test's folder.
+run_install_tools() {
+    run --separate-stderr env RUNNER_TEMP="$BATS_TEST_TMPDIR/runner" \
+        bash "$REPO_ROOT/.github/standard/bin/install-tools" "$@"
+}
+
+@test "install-tools prints its bin folder, and in Actions adds it to GITHUB_PATH as well" {
+    local tools=$BATS_TEST_TMPDIR/runner/tools
+    stub_init
+    # A bats clone already in place, which git reports at the pinned commit.
+    mkdir -p "$tools/bats-core-1.13.0/bin"
+    printf '#!/bin/bash\necho "Bats 1.13.0"\n' > "$tools/bats-core-1.13.0/bin/bats"
+    chmod +x "$tools/bats-core-1.13.0/bin/bats"
+    mkstub git <<< 'echo 3bca150ec86275d6d9d5a4fd7d48ab8b6c6f3d87'
+    PATH="$STUB_BIN:$PATH" run_install_tools bats
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$output" = "$tools/bin" ]
+    : > "$BATS_TEST_TMPDIR/github-path"
+    PATH="$STUB_BIN:$PATH" GITHUB_PATH="$BATS_TEST_TMPDIR/github-path" run_install_tools bats
+    [ "$status" -eq 0 ]
+    [ "$output" = "$tools/bin" ]
+    [ "$(awk 'END { print NR }' "$BATS_TEST_TMPDIR/github-path")" -eq 1 ]
+}
+
+@test "install-tools installs the PowerShell modules only on Windows, from a download that matches its pin" {
+    stub_init
+    mkstub uname <<< 'echo Linux'
+    PATH="$STUB_BIN:$PATH" run_install_tools pester
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"pester is pinned for Windows PowerShell 5.1 only"* ]]
+    mkstub uname <<< 'echo MINGW64_NT-10.0'
+    # A download of other bytes than the pinned package.
+    mkstub curl << 'STUB'
+while (( $# )); do
+    if [[ $1 == --output ]]; then printf 'other bytes\n' > "$2"; break; fi
+    shift
+done
+STUB
+    PATH="$STUB_BIN:$PATH" run_install_tools psscriptanalyzer
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"does not match its pinned SHA-256"* ]]
+    [[ $(cat "$STUB_LOG") == *"api/v2/package/PSScriptAnalyzer/1.25.0"* ]]
+    run_install_tools pwsh
+    [ "$status" -eq 64 ]
+}
+
+# Run run-stage ARGS in the folder $1 of $REPO through bats `run`, stderr apart.
+run_stage_in() {
+    local dir=$1
+    shift
+    run --separate-stderr env PATH="${STUB_BIN:-/nonexistent}:$PATH" RUNNER_TEMP="$BATS_TEST_TMPDIR/runner" \
+        bash -c 'cd "$1" && shift && exec bash "$0" "$@"' "$REPO/.github/standard/bin/run-stage" "$dir" "$@"
+}
+
+@test "no-skips passes a full run, and fails on a skip, a failure, a short run, no plan and no test" {
+    local d=$BATS_TEST_TMPDIR bad
+    printf '%s\n' '1..2' 'ok 1 one' 'ok 2 two' > "$d/good.tap"
+    printf '%s\n' '1..2' 'ok 1 one' 'ok 2 two # skip it needs a tool' > "$d/skip.tap"
+    printf '%s\n' '1..2' 'ok 1 one' 'not ok 2 two' > "$d/fail.tap"
+    printf '%s\n' '1..3' 'ok 1 one' 'ok 2 two' > "$d/short.tap"
+    printf '%s\n' 'ok 1 one' > "$d/noplan.tap"
+    printf '%s\n' '1..0' > "$d/empty.tap"
+    run sh "$REPO_ROOT/.github/standard/bin/no-skips" "$d/good.tap"
+    [ "$status" -eq 0 ]
+    for bad in skip fail short noplan empty; do
+        run sh "$REPO_ROOT/.github/standard/bin/no-skips" "$d/good.tap" "$d/$bad.tap"
+        [ "$status" -eq 1 ] || { printf '%s passed\n' "$bad" >&2; return 1; }
+    done
+    run sh "$REPO_ROOT/.github/standard/bin/no-skips" "$d/missing.tap"
+    [ "$status" -eq 2 ]
+}
+
+@test "no-skips names each file as it was given, backslashes and all" {
+    local dir file
+    # A Windows runner hands out paths such as D:\a\_temp; elsewhere a folder of that name.
+    if command -v cygpath > /dev/null 2>&1; then
+        dir=$BATS_TEST_TMPDIR/tap
+        mkdir -p "$dir"
+        file="$(cygpath -w "$dir")\\a.tap"
+    else
+        dir=$BATS_TEST_TMPDIR/'D:\a\_temp'
+        mkdir -p "$dir"
+        file=$dir/a.tap
+    fi
+    printf '1..1\nok 1 one\n' > "$file"
+    run --separate-stderr sh "$REPO_ROOT/.github/standard/bin/no-skips" "$file"
+    [ "$status" -eq 0 ]
+    [ "$output" = "no-skips: $file: 1 test(s), 0 skipped, 0 failed" ]
+    [ -z "$stderr" ]
+}
+
+@test "run-stage runs ci/STAGE from the top of the repository, and its status carries through" {
+    make_repo
+    mkdir -p "$REPO/ci" "$REPO/docs"
+    printf '#!/bin/sh\npwd > "%s/ran"\nexit 0\n' "$BATS_TEST_TMPDIR" > "$REPO/ci/test"
+    chmod +x "$REPO/ci/test"
+    run_stage_in "$REPO/docs" test
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    # The same folder, however its path is written: on a Windows runner bash reaches it through
+    # /tmp and a short 8.3 name, while run-stage enters the long path that git prints.
+    [ "$(cat "$BATS_TEST_TMPDIR/ran")" -ef "$REPO" ]
+    printf '#!/bin/sh\nexit 3\n' > "$REPO/ci/test"
+    run_stage_in "$REPO" test
+    [ "$status" -eq 3 ]
+    run_stage_in "$REPO" lint
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"this repository has no ci/lint or ci/lint.ps1"* ]]
+    run_stage_in "$REPO" deploy
+    [ "$status" -eq 64 ]
+}
+
+@test "run-stage runs ci/STAGE first, then ci/STAGE.ps1 under Windows PowerShell 5.1, only on Windows" {
+    make_repo
+    stub_init
+    mkdir -p "$REPO/ci"
+    printf '#!/bin/sh\necho bash >> "%s/order"\n' "$BATS_TEST_TMPDIR" > "$REPO/ci/system"
+    chmod +x "$REPO/ci/system"
+    printf 'Write-Output "synthetic"\r\n' > "$REPO/ci/system.ps1"
+    mkstub uname <<< 'echo Linux'
+    run_stage_in "$REPO" system
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"ci/system.ps1 needs Windows PowerShell 5.1"* ]]
+    mkstub uname <<< 'echo MINGW64_NT-10.0'
+    mkstub powershell << STUB
+echo powershell >> "$BATS_TEST_TMPDIR/order"
+printf '%s\n' "\$TEMP" "\$TMP" > "$BATS_TEST_TMPDIR/temp"
+STUB
+    : > "$BATS_TEST_TMPDIR/order"
+    POWERSHELL=powershell run_stage_in "$REPO" system
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(cat "$BATS_TEST_TMPDIR/order")" = "$(printf 'bash\npowershell')" ]
+    [[ $(cat "$STUB_LOG") == *"powershell -NoProfile -ExecutionPolicy Bypass -File "*"system.ps1"* ]]
+    [ "$(awk 'END { print NR }' "$BATS_TEST_TMPDIR/temp")" -eq 2 ]
+    [[ $(head -n 1 "$BATS_TEST_TMPDIR/temp") == *runner* ]]
 }

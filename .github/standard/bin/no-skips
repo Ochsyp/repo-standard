@@ -19,12 +19,14 @@ for file in "$@"; do
         exit 2
     fi
     result=0
-    awk -v file="$file" '
+    # The name comes through the environment: awk -v would read the backslashes of a Windows
+    # path such as D:\a\_temp as escape sequences.
+    FILE=$file awk '
         /^1\.\.[0-9]+$/ && !planned { plan = substr($0, 4) + 0; planned = 1; next }
         /^not ok [0-9]+/ { failed++; next }
         /^ok [0-9]+/ { ran++; if ($0 ~ /# [Ss][Kk][Ii][Pp]([ \t]|$)/) skipped++; next }
         END {
-            printf "no-skips: %s: %d test(s), %d skipped, %d failed", file, ran + failed, skipped, failed
+            printf "no-skips: %s: %d test(s), %d skipped, %d failed", ENVIRON["FILE"], ran + failed, skipped, failed
             bad = 0
             if (!planned) { printf ", no plan"; bad = 1 }
             else if (ran + failed != plan) { printf ", but the plan announced %d", plan; bad = 1 }

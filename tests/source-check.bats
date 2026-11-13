@@ -94,3 +94,31 @@ commit_unchecked() {
     [ "$status" -eq 1 ]
     [[ $stderr == *".githooks/rules/disk: names a private repository"* ]]
 }
+
+@test "no copy and no block names the owner of this repository, LICENSE aside" {
+    local owner type oid path
+    owner=${GITHUB_REPOSITORY%%/*}
+    if [[ -z $owner ]]; then
+        owner=$(git -C "$REPO_ROOT" remote get-url origin 2> /dev/null |
+            sed -n 's#.*github\.com[:/]\([^/]*\)/.*#\1#p')
+    fi
+    [[ -n $owner ]] || { echo "neither GITHUB_REPOSITORY nor a github.com origin names the owner" >&2; return 1; }
+    # MIT names its copyright holder in LICENSE. Every other copy and block lands in each
+    # repository of the standard and names no account; the name is read here and never printed.
+    while read -r type _ oid _ path; do
+        [[ $type == file || $type == block ]] || continue
+        [[ $path != LICENSE ]] || continue
+        if git -C "$REPO_ROOT" cat-file blob "$oid" | grep -q -i -F -e "$owner"; then
+            printf '%s names the owner of this repository\n' "${path%%#*}" >&2
+            return 1
+        fi
+    done < "$REPO_ROOT/.github/standard/MANIFEST"
+}
+
+@test "bats --count honours --filter-tags, so a count check over a filtered run holds" {
+    local all filtered
+    all=$(bats --count "$REPO_ROOT/.github/standard/tests/lint.bats")
+    filtered=$(bats --count --filter-tags '!lint' "$REPO_ROOT/.github/standard/tests/lint.bats")
+    (( all > 0 ))
+    [ "$filtered" -eq 0 ]
+}
