@@ -37,7 +37,7 @@ JQ_SHA='.sha'
 JQ_TAG='.tag_name'
 JQ_RUN='.workflow_runs[0].conclusion // "none"'
 JQ_DATES='.[].commit.committer.date'
-JQ_DIRECT='.[] | select(.committer.login != "web-flow") | .sha[0:7]'
+JQ_DIRECT='.[] | [.sha[0:7], (.committer.login // ""), (.commit.verification.verified // false)] | @tsv'
 JQ_REPO='[.private, .allow_squash_merge, .allow_merge_commit, .allow_rebase_merge, .squash_merge_commit_title, .squash_merge_commit_message, .delete_branch_on_merge, .allow_auto_merge, (.security_and_analysis.secret_scanning.status // "none"), (.security_and_analysis.secret_scanning_push_protection.status // "none")] | @tsv'
 JQ_ENABLED='.enabled'
 JQ_TOKEN='[.default_workflow_permissions, .can_approve_pull_request_reviews] | @tsv'
@@ -50,7 +50,7 @@ JQ_DEPENDABOT='.[] | select(.user.login == "dependabot[bot]") | [.number, .creat
 JQ_DRAFTS='.[] | select(.draft) | .tag_name'
 JQ_PRS='.[] | [.number, .updated_at] | @tsv'
 JQ_PR_TEXT='.title, (.body // "")'
-JQ_RELEASES='.[] | select(.draft | not) | [.id, .tag_name, (.published_at // .created_at)] | @tsv'
+JQ_RELEASES='.[] | select(.draft | not) | [.id, .tag_name] | @tsv'
 JQ_RELEASE_TEXT='(.name // ""), (.body // "")'
 JQ_GHSA='.[].ghsa_id'
 JQ_LATEST='[.tag_name, ((.published_at // "")[0:10])] | @tsv'
@@ -365,9 +365,12 @@ check_history() {
         emit "$r" history "not adopted yet"
         return
     fi
+    # A merge in the browser or through the API is GitHub's commit: web-flow commits it and GitHub's
+    # signature on it verifies. A committer set to web-flow by hand has no such signature.
     if direct=$(ghr api --paginate "repos/$s/commits?sha=main&since=$since&per_page=100" --jq "$JQ_DIRECT" \
         2> /dev/null); then
-        direct=$(paste -s -d ' ' - <<< "$direct")
+        direct=$(awk -F '\t' 'NF && ($2 != "web-flow" || $3 != "true") { print $1 }' <<< "$direct" |
+            paste -s -d ' ' -)
         [[ -z $direct ]] || note FAIL "a direct push to main: $direct"
     else
         note FAIL "cannot read the commits of main"
@@ -448,7 +451,7 @@ scan_kinds() {
 
 check_sweep() {
     local r=$1 s=$owner/$1 mirror=$sweep/$1.git seenf=$sweep/$1.seen sincef=$sweep/$1.since since=''
-    local ref sha kinds k number updated id tag stamp refs=0 found=0 texts=0
+    local notesf=$sweep/$1.notes ref sha kinds k number updated id tag hash refs=0 found=0 texts=0 errors=0
     local -a seen=()
     mkdir -p "$sweep"
     if [[ -d $mirror ]]; then
@@ -469,6 +472,7 @@ check_sweep() {
         refs=$((refs + 1))
         if ! kinds=$(scan_kinds "$mirror" --range "$sha" --not "${seen[@]}"); then
             note FAIL "cannot scan ${sha:0:7}"
+            errors=$((errors + 1))
             continue
         fi
         while IFS= read -r k; do
@@ -481,28 +485,50 @@ check_sweep() {
     while IFS=$'\t' read -r number updated; do
         [[ -n $number ]] || continue
         [[ -z $since || $updated > $since ]] || continue
-        ghr api "repos/$s/pulls/$number" --jq "$JQ_PR_TEXT" > "$tmp/text" 2> /dev/null ||
-            { note FAIL "cannot read #$number"; continue; }
+        if ! ghr api "repos/$s/pulls/$number" --jq "$JQ_PR_TEXT" > "$tmp/text" 2> /dev/null; then
+            note FAIL "cannot read #$number"
+            errors=$((errors + 1))
+            continue
+        fi
         texts=$((texts + 1))
-        kinds=$(scan_kinds "$mirror" --message "$tmp/text") || { note FAIL "cannot scan #$number"; continue; }
+        if ! kinds=$(scan_kinds "$mirror" --message "$tmp/text"); then
+            note FAIL "cannot scan #$number"
+            errors=$((errors + 1))
+            continue
+        fi
         while IFS= read -r k; do
             if [[ -n $k ]]; then printf '%s #%s %s\n' "$r" "$number" "$k"; found=$((found + 1)); fi
         done <<< "$kinds"
     done < <(ghr api --paginate "repos/$s/pulls?state=all&sort=updated&direction=desc&per_page=100" --jq "$JQ_PRS" 2> /dev/null || true)
-    while IFS=$'\t' read -r id tag stamp; do
+    # A release's notes can change after the publish, and its dates do not show it, so every
+    # release's text is read, and scanned when its SHA-256 differs from the last run's.
+    : > "$tmp/$r.notes"
+    while IFS=$'\t' read -r id tag; do
         [[ -n $id ]] || continue
-        [[ -z $since || $stamp > $since ]] || continue
-        ghr api "repos/$s/releases/$id" --jq "$JQ_RELEASE_TEXT" > "$tmp/text" 2> /dev/null ||
-            { note FAIL "cannot read $tag"; continue; }
+        if ! ghr api "repos/$s/releases/$id" --jq "$JQ_RELEASE_TEXT" > "$tmp/text" 2> /dev/null; then
+            note FAIL "cannot read $tag"
+            errors=$((errors + 1))
+            continue
+        fi
+        hash=$(sha256sum < "$tmp/text" | cut -c 1-64)
+        printf '%s %s\n' "$id" "$hash" >> "$tmp/$r.notes"
+        if [[ -f $notesf ]] && grep -q -x -F "$id $hash" "$notesf"; then continue; fi
         texts=$((texts + 1))
-        kinds=$(scan_kinds "$mirror" --message "$tmp/text") || { note FAIL "cannot scan $tag"; continue; }
+        if ! kinds=$(scan_kinds "$mirror" --message "$tmp/text"); then
+            note FAIL "cannot scan $tag"
+            errors=$((errors + 1))
+            continue
+        fi
         while IFS= read -r k; do
             if [[ -n $k ]]; then printf '%s %s %s\n' "$r" "$tag" "$k"; found=$((found + 1)); fi
         done <<< "$kinds"
     done < <(ghr api --paginate "repos/$s/releases?per_page=100" --jq "$JQ_RELEASES" 2> /dev/null || true)
     (( found == 0 )) || note FAIL "$found finding(s)"
-    if (( found > 0 )) || [[ $level != FAIL ]]; then
+    # Progress is saved only when every ref and text was read and scanned, so a run that failed
+    # anywhere scans the same again next time; findings are reported, and do not hold it back.
+    if (( errors == 0 )); then
         cp "$tmp/$r.refs" "$seenf"
+        cp "$tmp/$r.notes" "$notesf"
         printf '%s\n' "$now" > "$sincef"
     fi
     emit "$r" sweep "$refs ref(s) and $texts text(s) scanned"

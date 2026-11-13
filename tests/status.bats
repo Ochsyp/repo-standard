@@ -227,13 +227,14 @@ has_line() {
     [[ $output != *"#13"* ]]
 }
 
-@test "history: a commit on main that GitHub's web-flow did not make is a FAIL, by short SHA only" {
+@test "history: a commit on main that GitHub did not make and sign is a FAIL, by short SHA only" {
     repo_ok example
-    printf '0123456\n' | gh_reply api --paginate \
+    printf '0123456\tsomeone\ttrue\n1111111\tweb-flow\ttrue\n2222222\tweb-flow\tfalse\n' | gh_reply api --paginate \
         "repos/$OWNER/example/commits?sha=main&since=2026-11-01T10:00:00Z&per_page=100" --jq "$JQ_DIRECT"
     run_status --checks history example
     [ "$status" -eq 1 ]
-    has_line example history FAIL "a direct push to main: 0123456"
+    has_line example history FAIL "a direct push to main: 0123456 2222222"
+    [[ $output != *1111111* ]]
 }
 
 @test "names: a copy that names a private repository is a FAIL, and the name is never shown" {
@@ -309,6 +310,48 @@ has_line() {
     [[ $output$stderr != *forbidden-term-example* && $output$stderr != *"$BATS_TEST_TMPDIR"* ]]
     run_status --checks sweep --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" --now 2026-11-15T08:00:00Z example
     [[ $output != *"example $sha"* ]]
+}
+
+@test "sweep: an edited release note is scanned again, and a run that could not read saves no progress" {
+    local bare=$BATS_TEST_TMPDIR/remotes/example.git work=$BATS_TEST_TMPDIR/work sweep=$BATS_TEST_TMPDIR/sweep sha
+    local prs="repos/$OWNER/example/pulls?state=all&sort=updated&direction=desc&per_page=100"
+    git init -q --bare "$bare"
+    git init -q -b main "$work"
+    git -C "$work" config user.name "Test User"
+    git -C "$work" config user.email test@example.invalid
+    printf 'clean\n' > "$work/a.txt"
+    git -C "$work" add a.txt
+    git -C "$work" -c core.hooksPath=no-hooks commit -q -m "chore: clean"
+    git -C "$work" -c core.hooksPath=no-hooks push -q "$bare" main
+    mkdir -p "$XDG_CONFIG_HOME/git-privacy"
+    printf 'forbidden-term-example\n' > "$DENYLIST"
+    git config --global privacy.denylist "$DENYLIST"
+    : | gh_reply api --paginate "$prs" --jq "$JQ_PRS"
+    printf '9\tv1.0.0\n' | gh_reply api --paginate "repos/$OWNER/example/releases?per_page=100" --jq "$JQ_RELEASES"
+    printf 'v1.0.0\nThe notes.\n' | gh_reply api "repos/$OWNER/example/releases/9" --jq "$JQ_RELEASE_TEXT"
+    run_status --checks sweep --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" --now 2026-11-13T08:00:00Z example
+    [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
+    # The notes change after the publish; published_at does not.
+    printf 'v1.0.0\nforbidden-term-example\n' | gh_reply api "repos/$OWNER/example/releases/9" --jq "$JQ_RELEASE_TEXT"
+    run_status --checks sweep --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" --now 2026-11-14T08:00:00Z example
+    [ "$status" -eq 1 ]
+    grep -q -x -F "example v1.0.0 denylist" <<< "$output"
+    # A leak, and a pull request text that cannot be read: nothing is saved, so the next run sees both.
+    printf 'forbidden-term-example\n' > "$work/b.txt"
+    git -C "$work" add b.txt
+    git -C "$work" -c core.hooksPath=no-hooks commit -q -m "chore: a leak"
+    git -C "$work" -c core.hooksPath=no-hooks push -q "$bare" main
+    sha=$(git -C "$work" rev-parse --short=7 HEAD)
+    printf '5\t2026-11-14T12:00:00Z\n' | gh_reply api --paginate "$prs" --jq "$JQ_PRS"
+    RC=1 gh_reply api "repos/$OWNER/example/pulls/5" --jq "$JQ_PR_TEXT" < /dev/null
+    run_status --checks sweep --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" --now 2026-11-15T08:00:00Z example
+    [ "$status" -eq 1 ]
+    grep -q -x -F "example $sha denylist" <<< "$output"
+    has_line example sweep FAIL "cannot read #5"
+    printf 'A title\nA body.\n' | gh_reply api "repos/$OWNER/example/pulls/5" --jq "$JQ_PR_TEXT"
+    run_status --checks sweep --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" --now 2026-11-16T08:00:00Z example
+    grep -q -x -F "example $sha denylist" <<< "$output"
+    [[ $output != *"cannot read"* && $output != *"v1.0.0 denylist"* ]]
 }
 
 @test "pins: an advisory for a pinned action is a FAIL with its id; a newer release 14 days old warns" {
