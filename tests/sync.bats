@@ -228,6 +228,21 @@ block_of() {
     [[ $output == *$'Changed files:\n- none'* && $output == *$'Changed blocks:\n- none'* ]]
 }
 
+@test "sync refuses a block whose begin marker is there twice and its end marker not at all" {
+    make_target NAME=example VISIBILITY=private LICENSE=none RELEASE_KIND=legacy
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    git -C "$TGT" add -A
+    git -C "$TGT" -c core.hooksPath=no-hooks commit -q -m "chore: adopt"
+    sed -i -e 's/^<!-- standard:end workflow -->$/<!-- standard:begin workflow -->/' "$TGT/CONTRIBUTING.md"
+    printf 'Our own closing words.\n' >> "$TGT/CONTRIBUTING.md"
+    cp "$TGT/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/before"
+    run_sync --to "$TGT"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"CONTRIBUTING.md: the block workflow needs one begin and one end marker"* ]]
+    cmp "$BATS_TEST_TMPDIR/before" "$TGT/CONTRIBUTING.md"
+}
+
 @test "sync selects the profiles: private, LICENSE=none and legacy keep their own files" {
     make_target NAME=example VISIBILITY=private LICENSE=none RELEASE_KIND=legacy
     mkdir -p "$TGT/.github/workflows"

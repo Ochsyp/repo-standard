@@ -207,15 +207,16 @@ while read -r type profile oid _ path; do
         if [[ -f $src/templates/$target ]]; then cp "$src/templates/$target" "$file"; else : > "$file"; fi
         created=1
     fi
-    found=$(tr -d '\r' < "$file" | grep -c -x -F -e "$begin" -e "$end" || true)
-    if [[ $found == 0 ]]; then
+    begins=$(tr -d '\r' < "$file" | grep -c -x -F -e "$begin" || true)
+    ends=$(tr -d '\r' < "$file" | grep -c -x -F -e "$end" || true)
+    if [[ $begins == 0 && $ends == 0 ]]; then
         (( init )) || refuse "$target: the markers of the block $name are missing"
         case $target in
             *.md) printf '\n%s\n%s\n' "$begin" "$end" >> "$file" ;;
             *) { printf '%s\n%s\n' "$begin" "$end"; cat "$file"; } > "$tmp/head" && cp "$tmp/head" "$file" ;;
         esac
-    elif [[ $found != 2 ]]; then
-        refuse "$target: the markers of the block $name appear more than once"
+    elif [[ $begins != 1 || $ends != 1 ]]; then
+        refuse "$target: the block $name needs one begin and one end marker"
     fi
     git -C "$src" cat-file blob "$oid" > "$tmp/body" || fail "cannot read the block $path"
     BEGIN_LINE=$begin END_LINE=$end BODY=$tmp/body awk '
@@ -229,7 +230,7 @@ while read -r type profile oid _ path; do
         }
         line == ENVIRON["END_LINE"] { if (!inside) bad = 1; inside = 0; print line; next }
         !inside { print }
-        END { exit bad || !seen }' "$file" > "$tmp/new" ||
+        END { exit bad || !seen || inside }' "$file" > "$tmp/new" ||
         refuse "$target: the end marker of the block $name comes before its begin"
     if (( created )) && [[ $target == .github/dependabot.yml ]]; then
         printf '%s\n' '  - package-ecosystem: github-actions' '    directory: /' '    schedule:' \
