@@ -1,0 +1,294 @@
+#!/bin/bash
+# tools/sync of repo-standard: writes a published release of the standard into the worktree of a
+# repository of the standard (spec 6.2), run from a clone of that release's tag (5.3, step 3):
+#   tools/sync [--init] [--summary TEXT] --to DIR
+# It refuses a clone that is not exactly the tag vX.Y.Z of its VERSION, a release that is a draft
+# or not immutable, and a MANIFEST that differs from the release's MANIFEST asset; gh only reads.
+# It refuses when a copy or block it would write, the CHANGELOG line or the pull request text
+# names a repository of config/private-names, and it never prints the name. Then, in DIR, for the
+# profiles that DIR's .github/standard.conf selects, as standard-check selects them:
+#   1. it writes .githooks/ first, then every other copy, from the MANIFEST's blobs, and stages
+#      each with its mode;
+#   2. it replaces each block between its markers and never touches the text outside them;
+#   3. it deletes the files that DIR's old MANIFEST lists and the release drops;
+#   4. it writes the MANIFEST, whose blob id must equal the release's asset.
+# Under RELEASE_KIND=legacy, DIR keeps its own release.yml and image.yml; one it lacks is written,
+# since the standard needs both files and ci.yml calls image.yml. The releasing block waits for
+# the release adoption. --init adopts a repository that has a config and no MANIFEST yet:
+# CONTRIBUTING.md and SECURITY.md come from templates/ where DIR has none, a block whose markers
+# a file lacks is added at the head of a configuration file or at the end of a document, and a
+# new .github/dependabot.yml gets the github-actions entry at limit 0. Last, it prints the pull
+# request text: the changed files and blocks, the MANIFEST's blob id and the CHANGELOG line.
+# --summary replaces the line's default summary. Paths of this machine are never printed.
+# Exit 0; 1 refused; 2 a step that cannot run; 64 usage.
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
+set -euo pipefail
+
+usage() {
+    echo "usage: tools/sync [--init] [--summary TEXT] --to DIR" >&2
+    exit 64
+}
+say() { printf 'sync: %s\n' "$*" >&2; }
+refuse() {
+    say "$@"
+    exit 1
+}
+fail() {
+    say "$@"
+    exit 2
+}
+
+init=0
+summary=''
+to=''
+while (( $# )); do
+    case $1 in
+        --init) init=1 ;;
+        --summary) [[ -n ${2:-} ]] || usage; summary=$2; shift ;;
+        --to) [[ -n ${2:-} ]] || usage; to=$2; shift ;;
+        *) usage ;;
+    esac
+    shift
+done
+[[ -n $to ]] || usage
+
+umask 077
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/sync.XXXXXX") || fail "cannot create a temp folder"
+trap 'rm -rf -- "$tmp"' EXIT
+
+# The release: this clone at its tag, published, immutable, with the MANIFEST of its asset.
+src=$(CDPATH='' cd -- "${BASH_SOURCE[0]%/*}/.." && pwd)
+src=$(git -C "$src" rev-parse --show-toplevel 2> /dev/null) || fail "tools/sync runs from a clone of repo-standard"
+version=$(git -C "$src" show HEAD:VERSION 2> /dev/null | tr -d '\r') || fail "the clone has no VERSION"
+[[ $version =~ ^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$ ]] ||
+    refuse "VERSION $version is no release; clone a published tag"
+tag=v$version
+tagged=$(git -C "$src" rev-parse -q --verify "refs/tags/$tag^{commit}" 2> /dev/null) || tagged=''
+[[ $(git -C "$src" rev-parse HEAD) == "$tagged" ]] ||
+    refuse "this clone is not at the tag $tag: clone the release with --branch $tag"
+[[ -z $(git -C "$src" status --porcelain --untracked-files=no) ]] ||
+    refuse "this clone has changes; use a fresh clone of $tag"
+manifest=$src/.github/standard/MANIFEST
+[[ $(awk '$1 == "standard" && NF == 2 { print $2; exit }' "$manifest") == "$version" ]] ||
+    refuse "the MANIFEST names another version than $version"
+url=$(git -C "$src" remote get-url origin 2> /dev/null) || refuse "the clone has no origin"
+slug=${url%/}
+slug=${slug%.git}
+case $slug in
+    https://github.com/*) slug=${slug#https://github.com/} ;;
+    git@github.com:*) slug=${slug#git@github.com:} ;;
+    ssh://git@github.com/*) slug=${slug#ssh://git@github.com/} ;;
+    *) refuse "the clone's origin is not on github.com" ;;
+esac
+[[ $slug =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || refuse "the clone's origin names no repository"
+state=$(gh api "repos/$slug/releases/tags/$tag" --jq '[.draft, .immutable] | @tsv') ||
+    refuse "cannot read the release $tag"
+IFS=$'\t' read -r draft immutable <<< "$state"
+[[ $draft == false ]] || refuse "$tag is not a published release"
+[[ $immutable == true ]] || refuse "$tag is not immutable"
+mkdir "$tmp/asset"
+gh release download "$tag" -R "$slug" --pattern MANIFEST --dir "$tmp/asset" > /dev/null ||
+    refuse "cannot download the MANIFEST asset of $tag"
+asset=$(git hash-object --no-filters "$tmp/asset/MANIFEST")
+[[ $asset == "$(git -C "$src" rev-parse HEAD:.github/standard/MANIFEST)" ]] ||
+    refuse "the MANIFEST differs from the release's MANIFEST asset"
+
+# The target and its profiles.
+[[ -d $to ]] || refuse "the target is no folder"
+dir=$(git -C "$to" rev-parse --show-toplevel 2> /dev/null) || refuse "the target is not a git work tree"
+[[ -f $dir/.github/standard.conf ]] ||
+    refuse "the target has no .github/standard.conf; write it from templates/standard.conf first"
+conf() {
+    sh "$src/.github/standard/bin/conf" --get "$1" "$dir/.github/standard.conf" ||
+        refuse "cannot read $1 from the target's .github/standard.conf"
+}
+sh "$src/.github/standard/bin/conf" --check "$dir/.github/standard.conf" > /dev/null ||
+    refuse "the target's .github/standard.conf does not parse (above)"
+[[ $(conf ROLE) != source ]] || refuse "the target is repo-standard itself (ROLE=source)"
+kind=$(conf RELEASE_KIND)
+old=$dir/.github/standard/MANIFEST
+if (( init )); then
+    [[ ! -e $old ]] || refuse "the target has a MANIFEST already; sync it without --init"
+else
+    [[ -f $old ]] || refuse "the target has no .github/standard/MANIFEST; adopt it with --init"
+fi
+VIS=$(conf VISIBILITY) LIC=$(conf LICENSE) awk '
+    /^#/ || /^[ \t]*$/ || ($1 == "standard" && NF == 2) { next }
+    ($1 != "file" && $1 != "block") || NF != 5 { bad = 1; next }
+    {
+        p = $2
+        if (p == "all" || p == "release") sel = 1
+        else if (p == "mit") sel = ENVIRON["LIC"] == "MIT"
+        else if (p == "public" || p == "private") sel = ENVIRON["VIS"] == p
+        else { bad = 1; next }
+        if (sel) print
+    }
+    END { exit bad }' "$manifest" > "$tmp/entries" || refuse "the MANIFEST holds a line that sync does not know"
+
+# Nothing it writes may name a private repository.
+[[ -f $src/config/private-names ]] || refuse "the clone has no config/private-names"
+sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$src/config/private-names" | tr -d '\r' > "$tmp/names"
+# True when the file $1 names a repository of config/private-names.
+names_one() {
+    [[ -s $tmp/names ]] && grep -q -i -F -f "$tmp/names" -- "$1"
+}
+while read -r _ _ oid _ path; do
+    git -C "$src" cat-file blob "$oid" > "$tmp/blob" || fail "cannot read the blob of $path"
+    if names_one "$tmp/blob"; then
+        refuse "$path names a private repository (config/private-names)"
+    fi
+done < "$tmp/entries"
+if (( init )); then
+    line="- Repository standard $version: ${summary:-adopted, with the hooks, checks, workflows and blocks}."
+else
+    line="- Repository standard $version: ${summary:-the copies and blocks of this release}."
+fi
+printf '%s\n' "$line" > "$tmp/line"
+if names_one "$tmp/line"; then
+    refuse "the CHANGELOG line names a private repository (config/private-names)"
+fi
+
+changed_files=()
+changed_blocks=()
+removed=()
+
+# Write the copy at $3 from the blob $1 with the mode $2, and stage it with that mode.
+copy() {
+    local oid=$1 mode=$2 path=$3 before after
+    before=$(git -C "$dir" ls-files -s -- "$path" | awk '{ print $1 " " $2 }')
+    mkdir -p "$dir/$(dirname -- "$path")"
+    git -C "$src" cat-file blob "$oid" > "$dir/$path" || fail "cannot write $path"
+    if [[ $mode == 100755 ]]; then chmod +x "$dir/$path"; else chmod -x "$dir/$path"; fi
+    git -C "$dir" add -- "$path" || fail "cannot stage $path"
+    if [[ $mode == 100755 ]]; then
+        git -C "$dir" update-index --chmod=+x -- "$path"
+    else
+        git -C "$dir" update-index --chmod=-x -- "$path"
+    fi
+    after=$(git -C "$dir" ls-files -s -- "$path" | awk '{ print $1 " " $2 }')
+    [[ $after == "$mode $oid" ]] ||
+        refuse "$path: the target stages another blob than the MANIFEST names (a filter or attribute changes it)"
+    [[ $before == "$after" ]] || changed_files+=("$path")
+}
+
+# 1. .githooks/ first, so the next commit runs the new hooks, then the other copies.
+for pass in hooks rest; do
+    while read -r type profile oid mode path; do
+        [[ $type == file ]] || continue
+        if [[ $pass == hooks ]]; then [[ $path == .githooks/* ]] || continue; else [[ $path != .githooks/* ]] || continue; fi
+        if [[ $profile == release && $kind == legacy && -e $dir/$path ]]; then
+            continue
+        fi
+        copy "$oid" "$mode" "$path"
+    done < "$tmp/entries"
+done
+
+# 2. The blocks, between their markers.
+while read -r type profile oid _ path; do
+    [[ $type == block ]] || continue
+    [[ $profile != release || $kind != legacy ]] || continue
+    target=${path%%#*}
+    name=${path#*#}
+    name=${name%%@*}
+    case $target in
+        *.md) begin="<!-- standard:begin $name -->" end="<!-- standard:end $name -->" ;;
+        *) begin="# standard:begin $name" end="# standard:end $name" ;;
+    esac
+    file=$dir/$target
+    created=0
+    if [[ ! -e $file ]]; then
+        (( init )) || refuse "$target is missing, and only --init creates it"
+        mkdir -p "$(dirname -- "$file")"
+        if [[ -f $src/templates/$target ]]; then cp "$src/templates/$target" "$file"; else : > "$file"; fi
+        created=1
+    fi
+    found=$(tr -d '\r' < "$file" | grep -c -x -F -e "$begin" -e "$end" || true)
+    if [[ $found == 0 ]]; then
+        (( init )) || refuse "$target: the markers of the block $name are missing"
+        case $target in
+            *.md) printf '\n%s\n%s\n' "$begin" "$end" >> "$file" ;;
+            *) { printf '%s\n%s\n' "$begin" "$end"; cat "$file"; } > "$tmp/head" && cp "$tmp/head" "$file" ;;
+        esac
+    elif [[ $found != 2 ]]; then
+        refuse "$target: the markers of the block $name appear more than once"
+    fi
+    git -C "$src" cat-file blob "$oid" > "$tmp/body" || fail "cannot read the block $path"
+    BEGIN_LINE=$begin END_LINE=$end BODY=$tmp/body awk '
+        { line = $0; sub(/\r$/, "", line) }
+        line == ENVIRON["BEGIN_LINE"] {
+            print line
+            while ((getline body < ENVIRON["BODY"]) > 0) print body
+            inside = 1
+            seen = 1
+            next
+        }
+        line == ENVIRON["END_LINE"] { if (!inside) bad = 1; inside = 0; print line; next }
+        !inside { print }
+        END { exit bad || !seen }' "$file" > "$tmp/new" ||
+        refuse "$target: the end marker of the block $name comes before its begin"
+    if (( created )) && [[ $target == .github/dependabot.yml ]]; then
+        printf '%s\n' '  - package-ecosystem: github-actions' '    directory: /' '    schedule:' \
+            '      interval: weekly' '    open-pull-requests-limit: 0' >> "$tmp/new"
+    fi
+    if ! cmp -s "$tmp/new" "$file"; then
+        cp "$tmp/new" "$file"
+    fi
+    before=$(git -C "$dir" ls-files -s -- "$target" | awk '{ print $2 }')
+    git -C "$dir" add -- "$target" || fail "cannot stage $target"
+    [[ $(git -C "$dir" ls-files -s -- "$target" | awk '{ print $2 }') == "$before" ]] ||
+        changed_blocks+=("$target#$name")
+done < "$tmp/entries"
+
+# 3. The files the release drops.
+if (( ! init )); then
+    awk '$1 == "file" && NF == 5 { print $5 }' "$old" | LC_ALL=C sort -u > "$tmp/old.paths"
+    awk '$1 == "file" && NF == 5 { print $5 }' "$manifest" | LC_ALL=C sort -u > "$tmp/new.paths"
+    while IFS= read -r path; do
+        [[ -n $path ]] || continue
+        if [[ -n $(git -C "$dir" ls-files -- "$path") ]]; then
+            git -C "$dir" rm -q -f -- "$path" || fail "cannot delete $path"
+            removed+=("$path")
+        fi
+    done < <(LC_ALL=C comm -23 "$tmp/old.paths" "$tmp/new.paths")
+fi
+
+# 4. The MANIFEST, equal to the asset.
+mkdir -p "$dir/.github/standard"
+cp "$manifest" "$old"
+git -C "$dir" add -- .github/standard/MANIFEST || fail "cannot stage the MANIFEST"
+[[ $(git -C "$dir" rev-parse :.github/standard/MANIFEST) == "$asset" ]] ||
+    refuse "the target stages another MANIFEST than the release's asset"
+
+# The pull request text, checked for the names too.
+list() {
+    printf '%s:\n' "$1"
+    shift
+    if (( $# )); then printf -- '- %s\n' "$@"; else printf -- '- none\n'; fi
+    printf '\n'
+}
+{
+    printf '## What and why\n\n'
+    printf 'Repository standard %s, written by tools/sync from the published, immutable release %s.\n' \
+        "$version" "$tag"
+    printf "The MANIFEST's blob id is %s, the same as the release's MANIFEST asset.\n\n" "$asset"
+    list "Changed files" "${changed_files[@]}"
+    list "Changed blocks" "${changed_blocks[@]}"
+    list "Removed files" "${removed[@]}"
+    printf 'CHANGELOG line, under ### Changed:\n\n%s\n\n' "$line"
+    printf '## Phase\n\nnone\n\n## Release impact\n\nnone\n\n## Checks on the target\n\nnone\n\n'
+    printf '## Checklist\n\n'
+    # The backticks are Markdown's, as in the pull request template.
+    # shellcheck disable=SC2016
+    printf '%s\n' '- [ ] One phase or one change in this pull request' \
+        '- [ ] `CHANGELOG.md` has an entry under Unreleased, unless this is a release pull request or' \
+        '      the fix of a draft release' \
+        '- [ ] The checks in CONTRIBUTING.md, Checks, pass, and CI skipped no test' \
+        '- [ ] No private data in the change, the title, this text or the branch name: no personal names,' \
+        '      paths, host names, addresses, hardware or VM identifiers, real logs or secrets; examples' \
+        '      use the synthetic values in CONTRIBUTING.md, Test data' '' \
+        'CONTRIBUTING.md describes the workflow.'
+} > "$tmp/text"
+if names_one "$tmp/text"; then
+    refuse "the pull request text names a private repository (config/private-names)"
+fi
+cat "$tmp/text"

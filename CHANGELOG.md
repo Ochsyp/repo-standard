@@ -70,6 +70,11 @@ All notable changes to this project are listed here. The format follows
   `CONTRIBUTING.md` and `SECURITY.md` with the markers of their blocks, `tests/helpers.bash`, and
   `ci/` starters for shell, PowerShell, Python and the image kind, each checked by
   `tests/templates.bats` (phase 2)
+- `tools/sync`, which writes a published release into a repository's worktree from a clone of
+  its tag: it refuses a draft, a mutable release, a clone off the tag, a MANIFEST unlike the
+  asset and any text that names a private repository; it writes `.githooks/` first, then the
+  copies with their modes and the blocks between their markers, deletes what the release drops,
+  and prints the pull request text; `--init` adopts a repository that has its config (phase 2)
 
 ### Changed
 
