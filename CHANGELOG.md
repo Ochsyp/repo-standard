@@ -40,10 +40,11 @@ All notable changes to this project are listed here. The format follows
 - `pr-text`, which refuses a pull request title that is not a Conventional Commit and runs
   title and body through the hooks' privacy scan, its denylists only through their loader, and
   `pr-title`, which checks the current title and body of a pull request in CI (phase 2)
-- `release-meta`, ported from image-backup with the launcher's version rules and the `-dev` rule,
-  which checks `VERSION`, `CHANGELOG.md` and the tags and tells whether a release is
-  unreleased, pending or released, and `changelog-entry`, which checks the lines a pull request
-  adds to `CHANGELOG.md`, with the exceptions for a release, a draft fix and Dependabot (phase 2)
+- `release-meta`, the release checks that came before the standard, with the launcher's version
+  rules and the `-dev` rule, which checks `VERSION`, `CHANGELOG.md` and the tags and tells
+  whether a release is unreleased, pending or released, and `changelog-entry`, which checks the
+  lines a pull request adds to `CHANGELOG.md`, with the exceptions for a release, a draft fix and
+  Dependabot (phase 2)
 - `secret-scan`, which proves with positive controls that gitleaks and the rule packs still find
   something, checks that accepted findings name old commits only, refuses `.gitleaks.toml` and
   ignores inline allow markers, and scans a pull request's or a push's commits, or the whole
@@ -58,6 +59,15 @@ All notable changes to this project are listed here. The format follows
   `image`, `hooks-windows` and the `all-passed` gate), `secret-scan`, `release` (dry run, checks,
   build, attestation, draft, promote, verify) and `image`, with `actions.allow` and
   `workflows.bats`, which holds them to the pin, permission, token and contract rules (phase 2)
+- repo-standard's own `LICENSE` (the MIT text of the standard's repositories),
+  `.github/dependabot.yml` with the active `github-actions` entry, the pull request template,
+  `.github/standard/README.md`, and `config/private-names`, the private repositories that no
+  copy or block may name (phase 2)
+- `ci/system`, the Linux stage: the tests of `tools/`, then the standard's suites, lint included,
+  in both scratch consumers; and `ci/test.ps1`, a smoke test of the pinned Pester and
+  PSScriptAnalyzer (phase 2)
+- Tests that no copy and no block names the repository's owner, `LICENSE` aside, and that
+  `bats --count` honours `--filter-tags` (phase 2)
 
 ### Changed
 
@@ -68,5 +78,15 @@ All notable changes to this project are listed here. The format follows
   CI when GitHub did not say whether the repository is private (phase 2)
 - `lint.bats` also finds an image without a digest in an `image=` option, and runs actionlint,
   which may report only the `ubuntu-26.04` runner label it does not know yet (phase 2)
+- repo-standard's CI runs `test` on Windows: `ci/test` runs the tests of `tools/` and the
+  standard's suites in Git Bash, the lint aside, and `ci/system` runs the scratch consumers on
+  Linux; the config sets `CI_RUNNER=windows`, `CI_STAGES=test system` and `PS_MODULES` (phase 2)
+- `tools/consumer-suite` builds from the tree with `tools/manifest --print`, and gives each
+  consumer a `VERSION` and a `CHANGELOG.md`, and the private shape release workflows of its own
+  that the general rules accept (phase 2)
+- `tests/manifest.bats` lints every shell script that git tracks in `tools/`, `ci/` and
+  `tests/`, and leaves the workflow lines out of the MANIFEST self-check, so a Dependabot pull
+  request passes; `standard-check` still holds the release pull request to the whole MANIFEST
+  (phase 2)
 
 [Unreleased]: https://github.com/Ochsyp/repo-standard/commits/main

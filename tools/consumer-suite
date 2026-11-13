@@ -4,18 +4,23 @@
 # consumer. A test that needs a file only repo-standard holds, such as blocks/ or tools/, then
 # fails before a release. It runs here only; it is not vendored.
 #   tools/consumer-suite [--rev REV] [--shape public|private] DEST
-# It reads the MANIFEST of the index, or of the commit REV, and builds the repository DEST, which
-# must be missing or empty. The shape picks the consumer's config and what the MANIFEST gives it,
-# as standard-check selects it:
+# It rebuilds the MANIFEST from the index, or from the commit REV, with tools/manifest --print, so
+# the consumer holds the files as the next release vendors them, also where the committed
+# MANIFEST lags: a Dependabot pull request moves a workflow but cannot rebuild the MANIFEST. It
+# builds the repository DEST, which must be missing or empty. The shape picks the consumer's
+# config and what the MANIFEST gives it, as standard-check selects it:
 #   public   VISIBILITY=public, LICENSE=MIT, RELEASE_KIND=tar (the default): the profiles all,
 #            release, mit and public.
 #   private  VISIBILITY=private, LICENSE=none, RELEASE_KIND=legacy: the profiles all and
-#            private; each release file is the consumer's own, as under legacy, and no release
-#            block.
+#            private; release.yml and image.yml are the consumer's own, as under legacy (small
+#            workflows that the general rules accept, image.yml callable as ci.yml calls it),
+#            and no release block.
 # Each file entry is written from the blob the entry names, with the entry's mode, and each block
 # between its markers in its target file. DEST also holds the MANIFEST, the shape's
-# .github/standard.conf (PRIVACY_RULES=base), a ci/test and a ci/test.ps1, and docs/fstab.example,
-# a file of the consumer's own that only the disk pack reports. They are committed once in a
+# .github/standard.conf (PRIVACY_RULES=base), a VERSION and a CHANGELOG.md of its own (its link
+# names GITHUB_REPOSITORY when that is set, as release-meta requires), a ci/test and a
+# ci/test.ps1, and docs/fstab.example, a file of the consumer's own that only the disk pack
+# reports. They are committed once in a
 # source repository and cloned into DEST, so the work tree has the line ends of a checkout:
 # ci/test.ps1 gets CRLF. git runs without the global and the system config and without a
 # template, so no hook, identity or setting of the machine takes part, and it gets native paths,
@@ -67,6 +72,49 @@ native() {
     (CDPATH='' cd -- "$1" && { pwd -W 2> /dev/null || pwd; })
 }
 
+# Print the private shape's own workflow for the path $1 under RELEASE_KIND=legacy: small, held
+# to the general rules of workflows.bats, and for image.yml callable as ci.yml's image job calls
+# it, so actionlint accepts the call.
+legacy_workflow() {
+    case $1 in
+        */image.yml)
+            cat << 'EOF'
+# image.yml of a scratch consumer: its own under RELEASE_KIND=legacy. ci.yml calls it only where
+# IMAGE_PLATFORMS is set, and this consumer sets none.
+name: image
+on:
+  workflow_call:
+    inputs:
+      push:
+        type: boolean
+        required: true
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - run: echo "This consumer builds no image."
+EOF
+            ;;
+        *)
+            cat << 'EOF'
+# A release workflow of a scratch consumer: its own under RELEASE_KIND=legacy.
+name: release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - run: echo "This consumer releases by hand."
+EOF
+            ;;
+    esac
+}
+
 top=$(git rev-parse --show-toplevel 2> /dev/null) || fail "not in a git work tree"
 if [ -e "$dest" ] && [ -n "$(ls -A -- "$dest")" ]; then
     fail "$dest is not empty"
@@ -79,15 +127,14 @@ trap 'rm -rf -- "$tmp"' EXIT
 tmp=$(native "$tmp") || fail "cannot enter the temp folder"
 src=$tmp/source
 
-# The MANIFEST: of the commit REV, or of the index.
+# The MANIFEST, rebuilt from the commit REV or from the index.
 if [ -n "$rev" ]; then
-    oid=$(git rev-parse --verify --quiet "$rev^{commit}") || fail "no commit $rev"
-    mo=$(git ls-tree "$oid" -- .github/standard/MANIFEST | awk '{ print $3 }')
+    git rev-parse --verify --quiet "$rev^{commit}" > /dev/null || fail "no commit $rev"
+    sh tools/manifest --print --rev "$rev" > "$tmp/manifest" ||
+        fail "tools/manifest cannot rebuild the MANIFEST"
 else
-    mo=$(git ls-files -s -- .github/standard/MANIFEST | awk '{ print $2 }')
+    sh tools/manifest --print > "$tmp/manifest" || fail "tools/manifest cannot rebuild the MANIFEST"
 fi
-[ -n "$mo" ] || fail ".github/standard/MANIFEST is missing"
-git cat-file blob "$mo" > "$tmp/manifest" || fail "cannot read the MANIFEST"
 
 # The entries this consumer takes, as "type profile oid mode path" lines. A file or block line
 # that does not parse, or names an unknown profile, stops the build.
@@ -121,8 +168,7 @@ while read -r type profile oid mode path; do
         file)
             mkdir -p -- "$src/$(dirname -- "$path")"
             if [ "$shape" = private ] && [ "$profile" = release ]; then
-                printf '# %s of this consumer: its own under RELEASE_KIND=legacy.\n' "$path" \
-                    > "$src/$path"
+                legacy_workflow "$path" > "$src/$path"
             else
                 git -C "$top" cat-file blob "$oid" > "$src/$path" ||
                     fail "cannot read the blob of $path: is the MANIFEST stale?"
@@ -165,6 +211,19 @@ cp "$tmp/manifest" "$src/.github/standard/MANIFEST"
 } > "$src/.github/standard.conf"
 sh "$src/.github/standard/bin/conf" --check "$src/.github/standard.conf" ||
     fail "the consumer's config does not parse"
+
+# A VERSION and a CHANGELOG.md of the consumer's own, which release-meta accepts: no release
+# yet, and a link that names the repository of the run, as release-meta holds the links to it.
+printf '0.1.0-dev\n' > "$src/VERSION"
+{
+    printf '%s\n' '# Changelog' '' \
+        'All notable changes to this project are listed here. The format follows' \
+        '[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow' \
+        '[Semantic Versioning](https://semver.org/spec/v2.0.0.html). There are no releases yet.' \
+        '' '## [Unreleased]' '' '### Added' '' '- A scratch consumer of the standard.' ''
+    printf '[Unreleased]: https://github.com/%s/commits/main\n' \
+        "${GITHUB_REPOSITORY:-example-owner/example}"
+} > "$src/CHANGELOG.md"
 
 mkdir -p "$src/ci" "$src/docs"
 cat > "$src/ci/test" << 'EOF'

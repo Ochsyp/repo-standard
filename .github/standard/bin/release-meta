@@ -1,8 +1,8 @@
 #!/bin/bash
 # release-meta of the repository standard: the same file in every repository; never edit it
 # here. Checks that VERSION, CHANGELOG.md and the release tags agree (spec 3.8 and 3.9), and
-# prints version=, latest= and state= lines for CI. Ported from image-backup's release-meta, with
-# the launcher's version rules and the -dev rule.
+# prints version=, latest= and state= lines for CI. The release checks that came before the
+# standard, with the launcher's version rules and the -dev rule.
 #   release-meta check [--event EVENT] [--release vX.Y.Z] [--root DIR]
 #   release-meta notes X.Y.Z [--root DIR]
 # check reads the vX.Y.Z tags on stdin, one per line; other tags are ignored. The state is

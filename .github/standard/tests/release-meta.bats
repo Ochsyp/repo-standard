@@ -3,8 +3,9 @@
 # here. release-meta check and notes against synthetic VERSION files, CHANGELOG.md files and
 # tags: the states, the version and changelog rules of spec 3.8 and 3.9, the pull request rules,
 # and its output. Then changelog-entry on synthetic pull requests: the CHANGELOG line a pull
-# request adds, its form, and the exceptions for a release, a draft fix and Dependabot. Ported
-# from image-backup's release-meta tests, with the launcher's version rules and the -dev rule.
+# request adds, its form, and the exceptions for a release, a draft fix and Dependabot. The tests
+# of the release checks that came before the standard, with the launcher's version rules and the
+# -dev rule.
 
 # The sh -c scripts are single-quoted, and bats runs each test in a subshell, both on purpose.
 # shellcheck disable=SC2016,SC2030,SC2031

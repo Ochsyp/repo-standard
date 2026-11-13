@@ -1,0 +1,24 @@
+#!/bin/bash
+# ci/system of repo-standard, the system stage on Linux: the bats tests of tools/, then the
+# standard's suites, lint included, in a public and a private scratch consumer that hold only
+# what the MANIFEST vendors (tools/consumer-suite), so that a vendored test that needs a file only
+# this repository holds, or scans a consumer's own files, fails before a release; then no-skips
+# over every run. The job standard runs the suites in this repository itself, and ci/test runs
+# them on Windows.
+set -euo pipefail
+dir=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/repo-standard-system
+if [[ -e $dir ]]; then
+    echo "ci/system: $dir exists; remove it first" >&2
+    exit 1
+fi
+mkdir -p "$dir"
+bin=$(.github/standard/bin/install-tools bats shellcheck actionlint)
+PATH=$bin:$PATH
+status=0
+bats --tap tests/ | tee "$dir/tools.tap" || status=1
+for shape in public private; do
+    sh tools/consumer-suite --shape "$shape" "$dir/$shape"
+    bats --tap "$dir/$shape/.github/standard/tests/" | tee "$dir/$shape.tap" || status=1
+done
+.github/standard/bin/no-skips "$dir/tools.tap" "$dir/public.tap" "$dir/private.tap" || status=1
+exit "$status"
