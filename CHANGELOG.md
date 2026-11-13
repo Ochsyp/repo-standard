@@ -75,6 +75,12 @@ All notable changes to this project are listed here. The format follows
   asset and any text that names a private repository; it writes `.githooks/` first, then the
   copies with their modes and the blocks between their markers, deletes what the release drops,
   and prints the pull request text; `--init` adopts a repository that has its config (phase 2)
+- `tools/status`, the read-only daily audit: per repository the standard's version and asset,
+  the settings, CI health, direct pushes and private names; with `--clones` the hooks and the
+  denylist counts; with `--sweep` a denylist scan of every new commit, pull request text and
+  release note in mirrors of its own; once per run the pins' advisories and newer releases, and
+  token expiry. It prints one `<repo> <check> ok|warn|FAIL <reason>` line per check, never a
+  path or a term, and its `gh` wrapper only reads (phase 2)
 
 ### Changed
 

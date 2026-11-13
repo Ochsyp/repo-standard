@@ -1,0 +1,350 @@
+#!/usr/bin/env bats
+# status.bats of repo-standard: tools/status, the read-only audit (spec 6.5), against the gh stub
+# with fixed replies and bare local repositories. The tests source the tool with STATUS_LIB=1 for
+# its jq filters, so each stub reply answers exactly the call the tool makes. Every value is
+# synthetic; a run must never show a path, HOME or a denylist term.
+
+# The sh -c scripts are single-quoted, and bats runs each test in a subshell, both on purpose.
+# shellcheck disable=SC2016,SC2030,SC2031,SC2034
+load helpers
+
+OWNER=example-owner
+RS=$OWNER/repo-standard
+TODAY=2026-11-13
+
+setup() {
+    isolate_home
+    # shellcheck source=tools/status
+    STATUS_LIB=1 source "$REPO_ROOT/tools/status"
+    export STUB_LOG=$BATS_TEST_TMPDIR/stub.log STUB_GH=$BATS_TEST_TMPDIR/gh STUB_GH_READONLY=1
+    mkdir -p "$STUB_GH"
+    : > "$STUB_LOG"
+    SRC=$BATS_TEST_TMPDIR/rs
+    git init -q -b main "$SRC"
+    git -C "$SRC" remote add origin "https://github.com/$RS.git"
+    mkdir -p "$SRC/tools" "$SRC/config"
+    cp "$REPO_ROOT/tools/status" "$SRC/tools/status"
+    cp -R "$REPO_ROOT/.githooks" "$SRC/.githooks"
+    mkdir -p "$SRC/.github/standard/bin" "$SRC/.github/workflows"
+    cp "$REPO_ROOT/.github/standard/actions.allow" "$SRC/.github/standard/actions.allow"
+    cp "$REPO_ROOT/.github/standard/bin/"* "$SRC/.github/standard/bin/"
+    cp "$REPO_ROOT/.github/workflows/"*.yml "$SRC/.github/workflows/"
+    printf 'example-private\n' > "$SRC/config/private-names"
+}
+
+# The name of the gh stub's reply file for the call ARGS, as stub-bin/gh builds it.
+gh_key() {
+    local key
+    key=$(printf '%s ' "$@" | sed 's/[^A-Za-z0-9.-]\{1,\}/_/g')
+    if (( ${#key} > 120 )); then key=$(printf '%s' "$key" | sha256sum | cut -c 1-64); fi
+    printf '%s\n' "$key"
+}
+
+# Make the gh call ARGS print stdin, and exit with RC when that is set.
+gh_reply() {
+    local key
+    key=$(gh_key "$@")
+    cat > "$STUB_GH/$key"
+    if [[ -n ${RC:-} ]]; then printf '%s\n' "$RC" > "$STUB_GH/$key.rc"; else rm -f "$STUB_GH/$key.rc"; fi
+}
+
+# A MANIFEST of the standard X.Y.Z ($1) with one copy, the blob $2.
+manifest_of() {
+    printf '# Repository standard %s.\nstandard %s\nfile    all      %s  100755  .githooks/pre-commit\n' "$1" "$1" "$2"
+}
+
+# The stub's view of the repository $1, adopted at 1.0.0 (unless ADOPTED=no) with every setting
+# as the standard wants it; VIS=public makes it public. The release asset of 1.0.0 equals its
+# MANIFEST.
+repo_ok() {
+    local r=$OWNER/$1 m blob vis=${VIS:-private} private=true
+    [[ $vis == private ]] || private=false
+    blob=$(git -C "$SRC" hash-object -w --stdin <<< 'a hook')
+    m=$BATS_TEST_TMPDIR/manifest-$1
+    manifest_of 1.0.0 "$blob" > "$m"
+    mkdir -p "$STUB_GH/assets-v1.0.0"
+    cp "$m" "$STUB_GH/assets-v1.0.0/MANIFEST"
+    printf 'v1.0.0\n' | gh_reply api "repos/$RS/releases/latest" --jq "$JQ_TAG"
+    if [[ ${ADOPTED:-yes} == yes ]]; then
+        git hash-object --no-filters "$m" | gh_reply api "repos/$r/contents/.github/standard/MANIFEST?ref=main" --jq "$JQ_SHA"
+        gh_reply api -H "$RAW" "repos/$r/contents/.github/standard/MANIFEST?ref=main" < "$m"
+        printf 'NAME=%s\nVISIBILITY=%s\nRELEASE_KIND=tar\n' "$1" "$vis" |
+            gh_reply api -H "$RAW" "repos/$r/contents/.github/standard.conf?ref=main"
+        printf 'success\n' | gh_reply api "repos/$r/actions/workflows/ci.yml/runs?branch=main&per_page=1" --jq "$JQ_RUN"
+        printf 'success\n' | gh_reply api "repos/$r/actions/workflows/secret-scan.yml/runs?branch=main&per_page=1" --jq "$JQ_RUN"
+        printf 'success\n' | gh_reply api "repos/$r/actions/workflows/release.yml/runs?event=release&per_page=1" --jq "$JQ_RUN"
+        printf '2026-11-01T10:00:00Z\n' | gh_reply api --paginate "repos/$r/commits?sha=main&path=.github/standard/MANIFEST&per_page=100" --jq "$JQ_DATES"
+        : | gh_reply api --paginate "repos/$r/commits?sha=main&since=2026-11-01T10:00:00Z&per_page=100" --jq "$JQ_DIRECT"
+    else
+        RC=1 gh_reply api "repos/$r/contents/.github/standard/MANIFEST?ref=main" --jq "$JQ_SHA" < /dev/null
+        RC=1 gh_reply api -H "$RAW" "repos/$r/contents/.github/standard.conf?ref=main" < /dev/null
+    fi
+    printf '%s\ttrue\tfalse\tfalse\tPR_TITLE\tCOMMIT_MESSAGES\ttrue\tfalse\tenabled\tenabled\n' "$private" |
+        gh_reply api "repos/$r" --jq "$JQ_REPO"
+    printf 'true\n' | gh_reply api "repos/$r/immutable-releases" --jq "$JQ_ENABLED"
+    printf 'read\tfalse\n' | gh_reply api "repos/$r/actions/permissions/workflow" --jq "$JQ_TOKEN"
+    : | gh_reply api "repos/$r/vulnerability-alerts"
+    printf 'true\n' | gh_reply api "repos/$r/automated-security-fixes" --jq "$JQ_ENABLED"
+    printf 'true\tselected\ttrue\n' | gh_reply api "repos/$r/actions/permissions" --jq "$JQ_ACTIONS"
+    printf 'false\tfalse\n' | gh_reply api "repos/$r/actions/permissions/selected-actions" --jq "$JQ_OWNED"
+    sed -e '/^#/d' -e '/^$/d' "$SRC/.github/standard/actions.allow" |
+        gh_reply api "repos/$r/actions/permissions/selected-actions" --jq "$JQ_PATTERNS"
+    printf '7\n' | gh_reply api "repos/$r/rulesets" --jq "$JQ_RULESETS"
+    printf 'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368,scan:15368\tfalse\t0\n' |
+        gh_reply api "repos/$r/rulesets/7" --jq "$JQ_RULESET"
+    : | gh_reply api --paginate "repos/$r/pulls?state=open&per_page=100" --jq "$JQ_DEPENDABOT"
+    : | gh_reply api --paginate "repos/$r/releases?per_page=100" --jq "$JQ_DRAFTS"
+}
+
+# Run tools/status of $SRC with ARGS, the stubs first on PATH, through bats `run`.
+run_status() {
+    run --separate-stderr env PATH="$REPO_ROOT/.github/standard/tests/stub-bin:$PATH" \
+        bash "$SRC/tools/status" --today "$TODAY" "$@"
+}
+
+# Fail unless the output has the line "$1 $2 $3 ..." and its reason holds $4.
+has_line() {
+    grep -q -E "^$1 $2 $3( |$)" <<< "$output" || { printf 'no line "%s %s %s" in:\n%s\n' "$1" "$2" "$3" "$output" >&2; return 1; }
+    [[ -z ${4:-} ]] || grep -E "^$1 $2 $3( |$)" <<< "$output" | grep -q -F -e "$4" ||
+        { printf 'the line "%s %s %s" lacks "%s":\n%s\n' "$1" "$2" "$3" "$4" "$output" >&2; return 1; }
+}
+
+@test "ghr lets gh read only: a method other than GET and every field option are refused" {
+    run ghr api -X POST "repos/$RS/releases"
+    [ "$status" -eq 97 ]
+    run ghr api --method=PATCH "repos/$RS"
+    [ "$status" -eq 97 ]
+    for opt in -f -F --field --raw-field --input; do
+        run ghr api "repos/$RS/issues" "$opt" title=x
+        [ "$status" -eq 97 ] || { printf '%s passed\n' "$opt" >&2; return 1; }
+    done
+    run ghr release create v1.0.0
+    [ "$status" -eq 97 ]
+    run ghr pr merge 1
+    [ "$status" -eq 97 ]
+}
+
+@test "an adopted repository with every setting right is ok in every per-repository check" {
+    repo_ok example
+    run_status --checks standard,settings,health,history,names example
+    [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
+    has_line example standard ok "1.0.0"
+    has_line example settings ok
+    has_line example health ok
+    has_line example history ok
+    has_line example names ok
+    [ "$(grep -c -v -E '^gh (api|release download) ' "$STUB_LOG")" -eq 0 ]
+}
+
+@test "standard: a MANIFEST unlike its asset is a FAIL; a lag and legacy warn; before adoption it warns" {
+    repo_ok example
+    printf 'other\n' > "$STUB_GH/assets-v1.0.0/MANIFEST"
+    run_status --checks standard example
+    [ "$status" -eq 1 ]
+    has_line example standard FAIL "the MANIFEST differs from the v1.0.0 asset"
+    repo_ok example
+    printf 'v1.1.0\n' | gh_reply api "repos/$RS/releases/latest" --jq "$JQ_TAG"
+    printf 'NAME=example\nVISIBILITY=private\nRELEASE_KIND=legacy\n' |
+        gh_reply api -H "$RAW" "repos/$OWNER/example/contents/.github/standard.conf?ref=main"
+    run_status --checks standard example
+    [ "$status" -eq 0 ]
+    has_line example standard warn "1.0.0, the newest release is 1.1.0"
+    has_line example standard warn "RELEASE_KIND=legacy"
+    ADOPTED=no repo_ok other
+    run_status --checks standard,history,names other
+    [ "$status" -eq 0 ]
+    has_line other standard warn "not adopted yet"
+    repo_ok source
+    manifest_of 1.1.0-dev 0123456789012345678901234567890123456789 |
+        gh_reply api -H "$RAW" "repos/$OWNER/source/contents/.github/standard/MANIFEST?ref=main"
+    printf 'NAME=repo-standard\nVISIBILITY=private\nROLE=source\nRELEASE_KIND=tar\n' |
+        gh_reply api -H "$RAW" "repos/$OWNER/source/contents/.github/standard.conf?ref=main"
+    run_status --checks standard source
+    [ "$status" -eq 0 ]
+    has_line source standard ok "the source of the standard, at 1.1.0-dev"
+}
+
+@test "settings: each wrong setting is a FAIL; extra allow-list entries warn before adoption and fail after" {
+    repo_ok example
+    printf 'true\ttrue\ttrue\tfalse\tPR_TITLE\tPR_BODY\ttrue\ttrue\tenabled\tenabled\n' |
+        gh_reply api "repos/$OWNER/example" --jq "$JQ_REPO"
+    printf 'false\n' | gh_reply api "repos/$OWNER/example/immutable-releases" --jq "$JQ_ENABLED"
+    printf 'write\ttrue\n' | gh_reply api "repos/$OWNER/example/actions/permissions/workflow" --jq "$JQ_TOKEN"
+    RC=1 gh_reply api "repos/$OWNER/example/vulnerability-alerts" < /dev/null
+    printf 'true\tselected\tfalse\n' | gh_reply api "repos/$OWNER/example/actions/permissions" --jq "$JQ_ACTIONS"
+    { sed -e '/^#/d' -e '/^$/d' "$SRC/.github/standard/actions.allow"; printf 'example-owner/extra-action@*\n'; } |
+        gh_reply api "repos/$OWNER/example/actions/permissions/selected-actions" --jq "$JQ_PATTERNS"
+    run_status --checks settings example
+    [ "$status" -eq 1 ]
+    has_line example settings FAIL "merge commits are allowed"
+    has_line example settings FAIL "squash messages are not COMMIT_MESSAGES"
+    has_line example settings FAIL "auto-merge is allowed"
+    has_line example settings FAIL "immutable releases are off"
+    has_line example settings FAIL "the workflow token may write"
+    has_line example settings FAIL "Actions may approve pull requests"
+    has_line example settings FAIL "Dependabot alerts are off"
+    has_line example settings FAIL "SHA pinning is off"
+    has_line example settings FAIL "beyond actions.allow: example-owner/extra-action@*"
+    ADOPTED=no repo_ok other
+    { sed -e '/^#/d' -e '/^$/d' "$SRC/.github/standard/actions.allow"; printf 'example-owner/extra-action@*\ngithub/codeql-action/*@*\n'; } |
+        gh_reply api "repos/$OWNER/other/actions/permissions/selected-actions" --jq "$JQ_PATTERNS"
+    run_status --checks settings other
+    [ "$status" -eq 0 ]
+    has_line other settings warn "until the adoption: example-owner/extra-action@*"
+    [[ $output != *codeql* ]]
+}
+
+@test "settings of a public repository: the D4 ruleset exactly, secret scanning and push protection" {
+    VIS=public repo_ok example
+    run_status --checks settings example
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    has_line example settings ok
+    printf 'active\t1\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368\ttrue\t1\n' |
+        gh_reply api "repos/$OWNER/example/rulesets/7" --jq "$JQ_RULESET"
+    printf 'false\ttrue\tfalse\tfalse\tPR_TITLE\tCOMMIT_MESSAGES\ttrue\tfalse\tdisabled\tenabled\n' |
+        gh_reply api "repos/$OWNER/example" --jq "$JQ_REPO"
+    run_status --checks settings example
+    [ "$status" -eq 1 ]
+    has_line example settings FAIL "the ruleset differs from D4"
+    has_line example settings FAIL "secret scanning is off"
+    printf 'NAME=example\nVISIBILITY=private\nRELEASE_KIND=tar\n' |
+        gh_reply api -H "$RAW" "repos/$OWNER/example/contents/.github/standard.conf?ref=main"
+    run_status --checks settings example
+    has_line example settings FAIL "VISIBILITY=private, but GitHub shows it public"
+}
+
+@test "health: a red ci on main, an old Dependabot pull request and a waiting draft" {
+    repo_ok example
+    printf 'failure\n' | gh_reply api "repos/$OWNER/example/actions/workflows/ci.yml/runs?branch=main&per_page=1" --jq "$JQ_RUN"
+    printf '12\t2026-10-20\n13\t2026-11-10\n' |
+        gh_reply api --paginate "repos/$OWNER/example/pulls?state=open&per_page=100" --jq "$JQ_DEPENDABOT"
+    printf 'v1.1.0\n' | gh_reply api --paginate "repos/$OWNER/example/releases?per_page=100" --jq "$JQ_DRAFTS"
+    run_status --checks health example
+    [ "$status" -eq 1 ]
+    has_line example health FAIL "ci on main ended with failure"
+    has_line example health FAIL "Dependabot #12 is open 24 days"
+    has_line example health FAIL "draft v1.1.0 waits for Publish"
+    [[ $output != *"#13"* ]]
+}
+
+@test "history: a commit on main that GitHub's web-flow did not make is a FAIL, by short SHA only" {
+    repo_ok example
+    printf '0123456\n' | gh_reply api --paginate \
+        "repos/$OWNER/example/commits?sha=main&since=2026-11-01T10:00:00Z&per_page=100" --jq "$JQ_DIRECT"
+    run_status --checks history example
+    [ "$status" -eq 1 ]
+    has_line example history FAIL "a direct push to main: 0123456"
+}
+
+@test "names: a copy that names a private repository is a FAIL, and the name is never shown" {
+    local blob m
+    repo_ok example
+    blob=$(git -C "$SRC" hash-object -w --stdin <<< 'see example-private')
+    m=$BATS_TEST_TMPDIR/m2
+    manifest_of 1.0.0 "$blob" > "$m"
+    gh_reply api -H "$RAW" "repos/$OWNER/example/contents/.github/standard/MANIFEST?ref=main" < "$m"
+    run_status --checks names example
+    [ "$status" -eq 1 ]
+    has_line example names FAIL ".githooks/pre-commit names a private repository"
+    [[ $output$stderr != *example-private* ]]
+}
+
+@test "clones: hooks, requireDenylist, the includeIf lines and the denylist counts, never a path" {
+    local clone=$BATS_TEST_TMPDIR/clones/example
+    git init -q -b main "$clone"
+    cp -R "$REPO_ROOT/.githooks" "$clone/.githooks"
+    git -C "$clone" config core.hooksPath .githooks
+    git -C "$clone" config privacy.requireDenylist true
+    git -C "$clone" remote add origin "https://github.com/$OWNER/example.git"
+    printf '[includeIf "hasconfig:remote.*.url:https://github.com/%s/example.git"]\n\tpath = hooks.inc\n' \
+        "$OWNER" >> "$GIT_CONFIG_GLOBAL"
+    mkdir -p "$XDG_CONFIG_HOME/git-privacy"
+    printf 'forbidden-term-example\n' > "$DENYLIST"
+    git -C "$clone" config privacy.denylist "$DENYLIST"
+    run_status --checks clones --clones "example=$clone"
+    [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
+    has_line example clones ok "hooks on, requireDenylist on, 1 includeIf line(s), 1 denylist source(s), 1 term(s)"
+    git -C "$clone" config --unset core.hooksPath
+    git -C "$clone" config privacy.requireDenylist false
+    run_status --checks clones --clones "example=$clone"
+    [ "$status" -eq 1 ]
+    has_line example clones FAIL "the hooks are off"
+    has_line example clones FAIL "requireDenylist is not on"
+    [[ $output$stderr != *"$BATS_TEST_TMPDIR"* && $output$stderr != *"$HOME"* ]]
+    [[ $output$stderr != *forbidden-term-example* ]]
+}
+
+@test "sweep: mirrors of its own, each commit once, findings as <repo> <sha> <kind>, and pull request texts" {
+    local bare=$BATS_TEST_TMPDIR/remotes/example.git work=$BATS_TEST_TMPDIR/work sweep=$BATS_TEST_TMPDIR/sweep sha
+    git init -q --bare "$bare"
+    git init -q -b main "$work"
+    git -C "$work" config user.name "Test User"
+    git -C "$work" config user.email test@example.invalid
+    printf 'clean\n' > "$work/a.txt"
+    git -C "$work" add a.txt
+    git -C "$work" -c core.hooksPath=no-hooks commit -q -m "chore: clean"
+    git -C "$work" -c core.hooksPath=no-hooks push -q "$bare" main
+    mkdir -p "$XDG_CONFIG_HOME/git-privacy"
+    printf 'forbidden-term-example\n' > "$DENYLIST"
+    git config --global privacy.denylist "$DENYLIST"
+    : | gh_reply api --paginate "repos/$OWNER/example/pulls?state=all&sort=updated&direction=desc&per_page=100" --jq "$JQ_PRS"
+    : | gh_reply api --paginate "repos/$OWNER/example/releases?per_page=100" --jq "$JQ_RELEASES"
+    run_status --checks sweep --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" --now 2026-11-13T08:00:00Z example
+    [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
+    has_line example sweep ok "1 ref(s)"
+    [ -d "$sweep/example.git" ]
+    printf 'forbidden-term-example\n' > "$work/b.txt"
+    git -C "$work" add b.txt
+    git -C "$work" -c core.hooksPath=no-hooks commit -q -m "chore: a leak"
+    git -C "$work" -c core.hooksPath=no-hooks push -q "$bare" main
+    sha=$(git -C "$work" rev-parse --short=7 HEAD)
+    printf '5\t2026-11-13T12:00:00Z\n' |
+        gh_reply api --paginate "repos/$OWNER/example/pulls?state=all&sort=updated&direction=desc&per_page=100" --jq "$JQ_PRS"
+    printf 'A title\nforbidden-term-example\n' | gh_reply api "repos/$OWNER/example/pulls/5" --jq "$JQ_PR_TEXT"
+    run_status --checks sweep --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" --now 2026-11-14T08:00:00Z example
+    [ "$status" -eq 1 ]
+    grep -q -x -F "example $sha denylist" <<< "$output"
+    grep -q -x -F "example #5 denylist" <<< "$output"
+    has_line example sweep FAIL "2 finding(s)"
+    [[ $output$stderr != *forbidden-term-example* && $output$stderr != *"$BATS_TEST_TMPDIR"* ]]
+    run_status --checks sweep --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" --now 2026-11-15T08:00:00Z example
+    [[ $output != *"example $sha"* ]]
+}
+
+@test "pins: an advisory for a pinned action is a FAIL with its id; a newer release 14 days old warns" {
+    local action version
+    while read -r action version; do
+        : | gh_reply api "advisories?ecosystem=actions&affects=$action@$version" --jq "$JQ_GHSA"
+        printf 'v%s\t2026-01-01\n' "$version" | gh_reply api "repos/$action/releases/latest" --jq "$JQ_LATEST"
+    done < <(pinned_actions "$SRC")
+    while read -r _ repo version; do
+        printf '%s\t2026-01-01\n' "$version" | gh_reply api "repos/$repo/releases/latest" --jq "$JQ_LATEST"
+    done < <(pinned_tools "$SRC")
+    run_status --checks pins
+    [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
+    has_line repo-standard pins ok
+    printf 'GHSA-aaaa-bbbb-cccc\n' | gh_reply api "advisories?ecosystem=actions&affects=actions/checkout@7.0.1" --jq "$JQ_GHSA"
+    printf 'v7.2.0\t2026-10-01\n' | gh_reply api "repos/actions/setup-python/releases/latest" --jq "$JQ_LATEST"
+    printf 'v8.0.0\t2026-11-10\n' | gh_reply api "repos/actions/attest/releases/latest" --jq "$JQ_LATEST"
+    run_status --checks pins
+    [ "$status" -eq 1 ]
+    has_line repo-standard pins FAIL "actions/checkout 7.0.1: GHSA-aaaa-bbbb-cccc"
+    has_line repo-standard pins FAIL "actions/setup-python v7.2.0 is out"
+    [[ $output != *"actions/attest v8.0.0"* ]]
+}
+
+@test "tokens: 30 days before the expiry a warning, after it a FAIL, and no line without dates" {
+    run_status --checks tokens
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    run_status --checks tokens --token sessions=2026-12-01
+    [ "$status" -eq 0 ]
+    has_line sessions tokens warn "expires in 18 days"
+    run_status --checks tokens --token sessions=2026-11-01
+    [ "$status" -eq 1 ]
+    has_line sessions tokens FAIL "expired 12 days ago"
+    run_status --checks tokens --token sessions=2027-06-01
+    has_line sessions tokens ok
+    run_status --token sessions=tomorrow
+    [ "$status" -eq 64 ]
+}

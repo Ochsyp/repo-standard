@@ -35,11 +35,11 @@ file    all      7d3beb2bf680a7b879863021a7c839e77f2b1dcd  100644  .github/stand
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
 file    all      50919f5229d0d3cc1b6ffd3c4b188b01ba6421e7  100755  .github/standard/tests/privacy-scan.bats
 file    all      5206d58bc74058c9fbaae3f17857e9b671adb618  100755  .github/standard/tests/release-meta.bats
-file    all      26f85652750889e2ec819904e8b2ef33bc8d33d5  100755  .github/standard/tests/release-tools.bats
+file    all      68043af2b48229af66485b328ec21aa6674cf573  100755  .github/standard/tests/release-tools.bats
 file    all      8b54937d8ea46d0a68b6dc597ff56c2fca84528c  100755  .github/standard/tests/secret-scan.bats
 file    all      4b3f1f61d80540219b6f450530d8960db2482211  100755  .github/standard/tests/standard-check.bats
 file    all      0dc7bf3a939fcbe91f4e89701b19d8374d0f9698  100755  .github/standard/tests/stub-bin/docker
-file    all      461517c4e31b6dfdbc9bfc33dee0af424bd48051  100755  .github/standard/tests/stub-bin/gh
+file    all      869492e83d7f59aee5846419c4e0991afa5989ed  100755  .github/standard/tests/stub-bin/gh
 file    all      b9229271396615e2fab9ef1720eeaac20a4bb26f  100755  .github/standard/tests/stub-bin/gitleaks
 file    all      33af3e53f7cedf3586331f90876212139674921e  100755  .github/standard/tests/workflows.bats
 file    all      16b566bad89674d6d55c3141e7dbdd474b56d745  100644  .github/workflows/ci.yml
