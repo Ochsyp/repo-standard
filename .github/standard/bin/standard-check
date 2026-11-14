@@ -362,7 +362,9 @@ if [ "$role" = source ]; then
             git cat-file blob "$names" | sed -e '/^#/d' -e '/^[[:space:]]*$/d' > "$t/names"
             awk '$1 == "file" || $1 == "block" { p = $5; sub(/#.*/, "", p); print p }' \
                 "$t/rebuilt" > "$t/vendored"
-            awk -F '\t' 'index($2, "blocks/") == 1 { print $2 }' "$t/tree" >> "$t/vendored"
+            # The block bodies, and the templates that tools/sync --init copies into a consumer.
+            awk -F '\t' 'index($2, "blocks/") == 1 || index($2, "templates/") == 1 { print $2 }' \
+                "$t/tree" >> "$t/vendored"
             while IFS= read -r path; do
                 po=$(oid_of "$path")
                 [ -n "$po" ] || continue

@@ -95,6 +95,39 @@ commit_unchecked() {
     [[ $stderr == *".githooks/rules/disk: names a private repository"* ]]
 }
 
+# A source repository at $REPO, committed as repo-standard holds it: ROLE=source, the copies,
+# blocks/, tools/manifest and a MANIFEST that matches them.
+make_source_check_repo() {
+    make_repo
+    write_config ROLE=source PRIVACY_RULES=base
+    printf '1.0.0\n' > "$REPO/VERSION"
+    printf 'Synthetic licence text.\n' > "$REPO/LICENSE"
+    mkdir -p "$REPO/ci" "$REPO/tools"
+    printf '#!/bin/sh\nexit 0\n' > "$REPO/ci/test"
+    cp "$REPO_ROOT/tools/manifest" "$REPO/tools/manifest"
+    cp -R "$REPO_ROOT/blocks" "$REPO/blocks"
+    { block dependabot hash _github/dependabot.yml/dependabot.yml
+      printf '  - package-ecosystem: github-actions\n    directory: /\n'; } > "$REPO/.github/dependabot.yml"
+    git -C "$REPO" add -A
+    stage_executables
+    (cd "$REPO" && sh tools/manifest)
+    git -C "$REPO" add .github/standard/MANIFEST
+    commit_unchecked "chore: the source"
+}
+
+@test "ROLE=source: a template that names a private repository fails, as a copy does" {
+    make_source_check_repo
+    mkdir -p "$REPO/config" "$REPO/templates"
+    printf 'example-private\n' > "$REPO/config/private-names"
+    printf '# Security\n\nAsk example-private.\n' > "$REPO/templates/SECURITY.md"
+    git -C "$REPO" add config/private-names templates/SECURITY.md
+    (cd "$REPO" && sh tools/manifest)
+    git -C "$REPO" add .github/standard/MANIFEST
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"templates/SECURITY.md: names a private repository"* ]]
+}
+
 @test "no copy and no block names the owner of this repository, LICENSE aside" {
     local owner type oid path
     owner=${GITHUB_REPOSITORY%%/*}

@@ -23,9 +23,12 @@ setup() {
     export GITHUB_REPOSITORY=$SLUG
 }
 
-# The name of the gh stub's reply file for the call ARGS.
+# The name of the gh stub's reply file for the call ARGS, as stub-bin/gh builds it.
 gh_key() {
-    printf '%s ' "$@" | sed 's/[^A-Za-z0-9.-]\{1,\}/_/g'
+    local key
+    key=$(printf '%s ' "$@" | sed 's/[^A-Za-z0-9.-]\{1,\}/_/g')
+    if (( ${#key} > 120 )); then key=$(printf '%s' "$key" | sha256sum | cut -c 1-64); fi
+    printf '%s\n' "$key"
 }
 
 # Make the gh call ARGS print stdin, and exit with RC when that is set.

@@ -1,0 +1,19 @@
+#!/bin/bash
+# ci/lint starter for a shell repository (the standard's ci/ interface, spec 2.6): ShellCheck
+# over every shell script git tracks, with the pinned ShellCheck that install-tools installs (a
+# Linux binary, so CI_RUNNER=ubuntu). run-stage runs it from the top of the repository.
+set -euo pipefail
+PATH=$(.github/standard/bin/install-tools shellcheck):$PATH
+scripts=()
+while IFS= read -r path; do
+    first=
+    IFS= read -r first < "$path" || true
+    case $path:$first in
+        *.sh:* | *.bash:* | *:'#!/bin/sh'* | *:'#!/bin/bash'* | *:'#!/usr/bin/env bash'*) scripts+=("$path") ;;
+    esac
+done < <(git ls-files -- ':!.githooks' ':!.github/standard')
+if (( ${#scripts[@]} == 0 )); then
+    echo "ci/lint: no shell scripts to check"
+    exit 0
+fi
+shellcheck -x "${scripts[@]}"

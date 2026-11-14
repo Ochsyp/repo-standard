@@ -162,7 +162,7 @@ manifest_matches_but_workflows() {
             { printf '%s is not %s %s in the consumer\n' "$path" "$mode" "$oid" >&2; return 1; }
     done < "$dest/.github/standard/MANIFEST"
     # Nothing that only repo-standard holds; VERSION and CHANGELOG.md are the consumer's own.
-    run grep -E -e $'\t(blocks|tools|tests|config)/' \
+    run grep -E -e $'\t(blocks|tools|tests|config|templates)/' \
         -e $'\t(README\\.md|\\.github/workflows/bootstrap\\.yml)$' "$BATS_TEST_TMPDIR/files"
     [ "$status" -eq 1 ]
     [ "$(cat "$dest/VERSION")" = 0.1.0-dev ]
@@ -274,7 +274,7 @@ run_consumer_suite() {
 }
 
 # bats test_tags=lint
-@test "ShellCheck reports nothing in the shell scripts that git tracks in tools/, ci/ and tests/" {
+@test "ShellCheck reports nothing in the shell scripts that git tracks in tools/, ci/, tests/ and templates/" {
     local -a paths=()
     local path first
     need command shellcheck
@@ -287,8 +287,8 @@ run_consumer_suite() {
         case $first in
             '#!/bin/sh'* | '#!/bin/bash'* | '#!/usr/bin/env bash'*) paths+=("$path") ;;
         esac
-    done < <(git -C "$REPO_ROOT" ls-files -- tools ci tests)
-    (( ${#paths[@]} >= 7 ))
+    done < <(git -C "$REPO_ROOT" ls-files -- tools ci tests templates)
+    (( ${#paths[@]} >= 12 ))
     run_shellcheck "${paths[@]}"
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
 }

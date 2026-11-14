@@ -66,6 +66,24 @@ All notable changes to this project are listed here. The format follows
   PSScriptAnalyzer (phase 2)
 - Tests that no copy and no block names the repository's owner, `LICENSE` aside, and that
   `bats --count` honours `--filter-tags` (phase 2)
+- `templates/`, the starters of an adoption: a config that shows every key, `CHANGELOG.md`,
+  `CONTRIBUTING.md` and `SECURITY.md` with the markers of their blocks, `tests/helpers.bash`, and
+  `ci/` starters for shell, PowerShell, Python and the image kind, each checked by
+  `tests/templates.bats` (phase 2)
+- `tools/sync`, which writes a published release into a repository's worktree from a clone of
+  its tag: it refuses a draft, a mutable release, a clone off the tag, a MANIFEST unlike the
+  asset and any text that names a private repository; it writes `.githooks/` first, then the
+  copies with their modes and the blocks between their markers, deletes what the release drops,
+  and prints the pull request text; `--init` adopts a repository that has its config (phase 2)
+- `tools/status`, the read-only daily audit: per repository the standard's version and asset,
+  the settings, CI health, direct pushes and private names; with `--clones` the hooks and the
+  denylist counts; with `--sweep` a denylist scan of every new commit, pull request text and
+  release note in mirrors of its own; once per run the pins' advisories and newer releases, and
+  token expiry. It prints one `<repo> <check> ok|warn|FAIL <reason>` line per check, never a
+  path or a term, and its `gh` wrapper only reads (phase 2)
+- repo-standard's own `CONTRIBUTING.md`, with the workflow, guard-rails and releasing blocks and
+  its sections Checks, Test data, Changing the standard and Release contract, and `SECURITY.md`,
+  with the reporting and automated-checks blocks and its trust model (phase 2)
 
 ### Changed
 
@@ -74,6 +92,8 @@ All notable changes to this project are listed here. The format follows
   Gallery packages (phase 2)
 - `standard-check` names a `VERSION_COPY` problem by its entry, never by its path, and notes in
   CI when GitHub did not say whether the repository is private (phase 2)
+- `standard-check` also holds repo-standard's `templates/` to the private names, since
+  `tools/sync --init` copies them into a repository (phase 2)
 - `lint.bats` also finds an image without a digest in an `image=` option, and runs actionlint,
   which may report only the `ubuntu-26.04` runner label it does not know yet (phase 2)
 - repo-standard's CI runs `test` on Windows: `ci/test` runs the tests of `tools/` and the
