@@ -131,6 +131,7 @@ while IFS= read -r line; do
         LICENSE=*) license=${line#*=} ;;
         CI_STAGES=*) stages=${line#*=} ;;
         RELEASE_KIND=*) kind=${line#*=} ;;
+        SEAL=*) seal=${line#*=} ;;
         VERSION_COPY=*) printf '%s\n' "${line#*=}" >> "$t/version-copy" ;;
     esac
 done < "$t/conf.out"
@@ -182,7 +183,9 @@ if [ "$consumer" -eq 1 ]; then
         problem ".github/standard/MANIFEST: missing"
     else
         git cat-file blob "$man" > "$t/manifest" || std_fail "cannot read the MANIFEST"
-        VIS=$visibility LIC=$license KIND=$kind awk -v tree="$t/tree" -v blocks="$t/blocks" '
+        # A block's seal variant (profile seal) replaces the block of its name where SEAL=yes; a
+        # block that exists only as a seal variant must be absent elsewhere ("-" in the blocks list).
+        VIS=$visibility LIC=$license KIND=$kind SEAL=$seal awk -v tree="$t/tree" -v blocks="$t/blocks" '
             BEGIN {
                 while ((getline line < tree) > 0) {
                     split(line, f, "\t"); split(f[1], m, " ")
@@ -200,20 +203,28 @@ if [ "$consumer" -eq 1 ]; then
                 if (p == "all" || p == "release") sel = 1
                 else if (p == "mit") sel = ENVIRON["LIC"] == "MIT"
                 else if (p == "public" || p == "private") sel = ENVIRON["VIS"] == p
+                else if (p == "seal") sel = ENVIRON["SEAL"] == "yes"
                 else { print "standard-check: .github/standard/MANIFEST: line " NR ": unknown profile " p; bad++; next }
                 if ($1 == "file") { listed[$5] = 1 }
-                if (!sel) next
                 if ($1 == "block") {
+                    name = $5; sub(/@.*/, "", name)
+                    if (p == "seal") sealed[name] = 1; else plain[name] = 1
+                    if (!sel) { if (p == "seal") unsel[$5] = name; next }
                     if (p == "release" && ENVIRON["KIND"] == "legacy") next
-                    print $3, $5 > blocks
+                    nb++; bwant[nb] = $3; bentry[nb] = $5; bname[nb] = name; bprof[nb] = p
                     next
                 }
+                if (!sel) next
                 if (!($5 in oid)) { print "standard-check: " $5 ": missing (the MANIFEST lists it)"; bad++; next }
                 if (p == "release" && ENVIRON["KIND"] == "legacy") next
                 if (oid[$5] != $3) { print "standard-check: " $5 ": differs from the MANIFEST"; bad++ }
                 if (mode[$5] != $4) { print "standard-check: " $5 ": mode " mode[$5] ", the MANIFEST says " $4; bad++ }
             }
             END {
+                for (i = 1; i <= nb; i++)
+                    if (bprof[i] == "seal" || !(bname[i] in sealed) || ENVIRON["SEAL"] != "yes")
+                        print bwant[i], bentry[i] > blocks
+                for (e in unsel) if (!(unsel[e] in plain)) print "-", e > blocks
                 if (!version) { print "standard-check: .github/standard/MANIFEST: no standard version line"; bad++ }
                 for (path in oid) {
                     if (path == ".github/standard/MANIFEST" || (path in listed)) continue
@@ -231,6 +242,14 @@ if [ "$consumer" -eq 1 ]; then
             block=${entry#*#}
             block=${block%%@*}
             toid=$(oid_of "$target")
+            if [ "$want" = - ]; then
+                [ -n "$toid" ] || continue
+                status=0
+                block_of "$toid" "$target" "$block" "$t/block" || status=$?
+                [ "$status" -eq 3 ] ||
+                    problem "$entry: the block is here, but the config does not set SEAL=yes"
+                continue
+            fi
             if [ -z "$toid" ]; then
                 problem "$entry: $target is missing"
                 continue

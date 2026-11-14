@@ -23,3 +23,6 @@
 
 <!-- standard:begin automated-checks -->
 <!-- standard:end automated-checks -->
+
+<!-- Under SEAL=yes the block sealed-releases follows here: tools/sync --init adds its markers,
+and a repository that sets SEAL=yes later adds them here first. -->

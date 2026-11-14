@@ -14,7 +14,9 @@
 #   4. it writes the MANIFEST, whose blob id must equal the release's asset.
 # Under RELEASE_KIND=legacy, DIR keeps its own release.yml and image.yml; one it lacks is written,
 # since the standard needs both files and ci.yml calls image.yml. The releasing block waits for
-# the release adoption. --init adopts a repository that has a config and no MANIFEST yet:
+# the release adoption. Under SEAL=yes a block's seal variant replaces the block of its name, and
+# a block that exists only as a seal variant, such as SECURITY.md's sealed-releases, needs its
+# markers in the file first. --init adopts a repository that has a config and no MANIFEST yet:
 # CONTRIBUTING.md and SECURITY.md come from templates/ where DIR has none, a block whose markers
 # a file lacks is added at the head of a configuration file or at the end of a document, and a
 # new .github/dependabot.yml gets the github-actions entry at limit 0. Last, it prints the pull
@@ -112,7 +114,8 @@ if (( init )); then
 else
     [[ -f $old ]] || refuse "the target has no .github/standard/MANIFEST; adopt it with --init"
 fi
-VIS=$(conf VISIBILITY) LIC=$(conf LICENSE) awk '
+# Under SEAL=yes a block's seal variant replaces the block of its name.
+VIS=$(conf VISIBILITY) LIC=$(conf LICENSE) SEAL=$(conf SEAL) awk '
     /^#/ || /^[ \t]*$/ || ($1 == "standard" && NF == 2) { next }
     ($1 != "file" && $1 != "block") || NF != 5 { bad = 1; next }
     {
@@ -120,10 +123,18 @@ VIS=$(conf VISIBILITY) LIC=$(conf LICENSE) awk '
         if (p == "all" || p == "release") sel = 1
         else if (p == "mit") sel = ENVIRON["LIC"] == "MIT"
         else if (p == "public" || p == "private") sel = ENVIRON["VIS"] == p
+        else if (p == "seal") sel = ENVIRON["SEAL"] == "yes"
         else { bad = 1; next }
-        if (sel) print
+        name = $5; sub(/@.*/, "", name)
+        if ($1 == "block" && p == "seal") sealed[name] = 1
+        if (sel) { n++; entry[n] = $0; type[n] = $1; prof[n] = p; base[n] = name }
     }
-    END { exit bad }' "$manifest" > "$tmp/entries" || refuse "the MANIFEST holds a line that sync does not know"
+    END {
+        for (i = 1; i <= n; i++)
+            if (type[i] != "block" || prof[i] == "seal" || !(base[i] in sealed) || ENVIRON["SEAL"] != "yes")
+                print entry[i]
+        exit bad
+    }' "$manifest" > "$tmp/entries" || refuse "the MANIFEST holds a line that sync does not know"
 
 # Nothing it writes may name a private repository.
 [[ -f $src/config/private-names ]] || refuse "the clone has no config/private-names"

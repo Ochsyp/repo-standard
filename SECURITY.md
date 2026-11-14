@@ -22,10 +22,20 @@ A change here reaches every repository at its next sync. The owner's review of e
 here, of the release pull request and of each sync pull request is the gate; no session publishes
 a release.
 
+The seal tool is code from this repository that runs with the offline release key. A stolen
+token that pushed to `main` here and published a release could offer a changed tool, so the
+managing session installs a new version only from a verified asset and only after the owner's
+OK, and `tools/status` reports direct pushes. The tool itself reads GitHub with `gh`, GET only;
+asks the key's passphrase only in its own dialog, with no ssh agent; fetches into mirrors of its
+own, where no hook runs and no file of a repository is run; verifies each new seal for
+`maintainer` against the hosts' allowed signers before the push; and pushes that one tag, never
+with force, so it cannot move a seal.
+
 ## Network
 
 The hooks make no connection. CI downloads the pinned tools and actions. `tools/sync` and
-`tools/status` read GitHub with `gh`, GET only.
+`tools/status` read GitHub with `gh`, GET only. The seal tool reads the same way, fetches the
+repository it seals and pushes one tag to it.
 
 ## Data that stays private
 

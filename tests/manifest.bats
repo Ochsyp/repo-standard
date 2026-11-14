@@ -51,6 +51,8 @@ has_entry() {
 
 @test "tools/manifest lists the copies with profiles and modes, and the blocks with theirs" {
     make_source
+    printf 'Release in the browser, then seal.\n' > "$REPO/blocks/CONTRIBUTING.md/releasing@seal.md"
+    git -C "$REPO" add -A
     run_manifest --print
     [ "$status" -eq 0 ]
     [[ $output == *$'\nstandard 1.0.0-dev\n'* ]]
@@ -64,6 +66,8 @@ has_entry() {
         'SECURITY.md#reporting@private'
     has_entry block release "$(git -C "$REPO" rev-parse :blocks/CONTRIBUTING.md/releasing.md)" - \
         'CONTRIBUTING.md#releasing'
+    has_entry block seal "$(git -C "$REPO" rev-parse ':blocks/CONTRIBUTING.md/releasing@seal.md')" - \
+        'CONTRIBUTING.md#releasing@seal'
     has_entry block all "$(git -C "$REPO" rev-parse :blocks/_gitattributes/gitattributes)" - \
         '.gitattributes#gitattributes'
     has_entry block all "$(git -C "$REPO" rev-parse :blocks/_github/dependabot.yml/dependabot.yml)" - \

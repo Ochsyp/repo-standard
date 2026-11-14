@@ -14,7 +14,7 @@ file    all      62d16e7fb242558ee36d667d982327636c7dd6cb  100644  .github/pull_
 file    all      59dd7e555b62927bd3c97693de357aebc6188e2a  100644  .github/standard/README.md
 file    all      a6a035238c79fb86b568688177b7093f91715dfd  100644  .github/standard/actions.allow
 file    all      c11cccce8c02c866d3cb77bd698a0204da1cf96b  100755  .github/standard/bin/changelog-entry
-file    all      1fcffe49a338fcf15930e3e4153d52832531c21f  100755  .github/standard/bin/conf
+file    all      37797131893b0ee6eb1ff45dce51ad3ee650418e  100755  .github/standard/bin/conf
 file    all      0dd9d2bce88cbe1af44ee7455463170c8d365e9d  100755  .github/standard/bin/install-tools
 file    all      1efffa291d7661ae34c4e7e1bc4cb3a959f9bd6d  100644  .github/standard/bin/lib.bash
 file    all      896c9969b818ba9bdbb300858c3fe95058849a25  100755  .github/standard/bin/no-skips
@@ -28,8 +28,8 @@ file    all      3d504d7817870445c8ec917dfb0f6e102d2b764e  100755  .github/stand
 file    all      ca6920304c4e2abd8491d5cda634358407433b5d  100755  .github/standard/bin/release-verify
 file    all      c51eace2dce1e43778a3d64fd6217d29fc369d9f  100755  .github/standard/bin/run-stage
 file    all      c47bfe96f2d655dcfd54aa7056b49eedf71814e6  100755  .github/standard/bin/secret-scan
-file    all      e2badd06ab6d8937641428aef1e6823075229ec0  100755  .github/standard/bin/standard-check
-file    all      8de15312c9c7e1d01f5987acc12fe3c89f061917  100755  .github/standard/tests/conf.bats
+file    all      e5d0eff6e5ede838d9adcabdf2ee89f5e24a8399  100755  .github/standard/bin/standard-check
+file    all      1fee954a0ec0b922e65a395714d66d1b9f9b6792  100755  .github/standard/tests/conf.bats
 file    all      47c34405d4ac95610b48e2b1d648b41321e4be10  100755  .github/standard/tests/hooks.bats
 file    all      7d3beb2bf680a7b879863021a7c839e77f2b1dcd  100644  .github/standard/tests/lib.bash
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
@@ -37,7 +37,7 @@ file    all      50919f5229d0d3cc1b6ffd3c4b188b01ba6421e7  100755  .github/stand
 file    all      5206d58bc74058c9fbaae3f17857e9b671adb618  100755  .github/standard/tests/release-meta.bats
 file    all      ce286a83d9cbfec96e2dedd238fbe7b87d956c68  100755  .github/standard/tests/release-tools.bats
 file    all      8b54937d8ea46d0a68b6dc597ff56c2fca84528c  100755  .github/standard/tests/secret-scan.bats
-file    all      4b3f1f61d80540219b6f450530d8960db2482211  100755  .github/standard/tests/standard-check.bats
+file    all      91785b801accf8c155d43b2512047548dc7ac38f  100755  .github/standard/tests/standard-check.bats
 file    all      0dc7bf3a939fcbe91f4e89701b19d8374d0f9698  100755  .github/standard/tests/stub-bin/docker
 file    all      869492e83d7f59aee5846419c4e0991afa5989ed  100755  .github/standard/tests/stub-bin/gh
 file    all      b9229271396615e2fab9ef1720eeaac20a4bb26f  100755  .github/standard/tests/stub-bin/gitleaks
@@ -54,9 +54,11 @@ block   all      ca6e9b8346666c633f45f169d1b49831f970054e  -       .github/depen
 block   private  5c4a591cf84e7908186af0f81975fa3d41fbd679  -       CONTRIBUTING.md#guard-rails@private
 block   public   3d0736ce601e04ecfd4cc85c346c88268098dac8  -       CONTRIBUTING.md#guard-rails@public
 block   release  e3473b7aaa8398c655bbe357151043d5e8b1619f  -       CONTRIBUTING.md#releasing
+block   seal     99b1ec55fe99b2df0c9d66d419d6f7b7d5346a05  -       CONTRIBUTING.md#releasing@seal
 block   all      9000a6afdde6887d927fe3024772401de73f38e7  -       CONTRIBUTING.md#standard
 block   all      581f57a82c5bd79ebadad7fb105c66c207051eb8  -       CONTRIBUTING.md#workflow
 block   private  58a71c9cd2298067184dadfcafad6dc3e9f4cd31  -       SECURITY.md#automated-checks@private
 block   public   9a20dd491d91f7f0b30b8266ad60ecace3393845  -       SECURITY.md#automated-checks@public
 block   private  c828e6428c3280d2da931787c7880ebadfd14b54  -       SECURITY.md#reporting@private
 block   public   cec24782757f5de75882626848f6ccf75c18a9cc  -       SECURITY.md#reporting@public
+block   seal     53636891a2c8427635a39e0b271299284e8f69bd  -       SECURITY.md#sealed-releases@seal

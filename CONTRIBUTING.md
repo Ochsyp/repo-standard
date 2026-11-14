@@ -74,10 +74,13 @@ URL. In a clone made from a local path, or anywhere else, turn them on once afte
   `sh .github/standard/bin/standard-check --local`.
 - `sh tools/consumer-suite [--shape private] DIR`, then the standard's suites in DIR: they must
   pass where only the vendored files exist.
-- CI runs `standard` (every suite of the standard on Linux), `test` (Windows: `ci/test`, then the
-  smoke test of the pinned PowerShell modules), `system` (Linux: the scratch consumers, lint
-  included) and `hooks-windows`, and fails on any skipped test. Locally a test may skip only for
-  a missing tool, such as actionlint.
+- On Windows, the tests of the seal dialog: `.github/standard/bin/install-tools pester
+  psscriptanalyzer`, the folder `modules` beside the printed one first on `PSModulePath`, then
+  `powershell.exe -NoProfile -File ci/test.ps1`.
+- CI runs `standard` (every suite of the standard on Linux), `test` (Windows: `ci/test`, then
+  `ci/test.ps1`: the smoke test of the pinned PowerShell modules and the Pester tests of the seal
+  dialog), `system` (Linux: the scratch consumers, lint included) and `hooks-windows`, and fails
+  on any skipped test. Locally a test may skip only for a missing tool, such as actionlint.
 
 ## Test data
 
@@ -131,5 +134,25 @@ delete a release.
 
 A release `vX.Y.Z` holds `repo-standard-X.Y.Z.tar.gz`, the tree at the tag with the manifest
 `repo-standard-release.json` added; the `MANIFEST` asset, byte for byte the
-`.github/standard/MANIFEST` of the tag; and `SHA256SUMS`. `tools/sync` and `tools/status` trust a
-release only when it is published and immutable, and compare each MANIFEST with its asset.
+`.github/standard/MANIFEST` of the tag; the seal tool's `release-seal`, `release-seal-askpass` and
+`release-seal.ps1`, each byte for byte its file in `tools/` of the archive; and `SHA256SUMS`.
+`tools/sync` and `tools/status` trust a release only when it is published and immutable, and
+compare each MANIFEST with its asset.
+
+The seal tool of D1 = B runs on the maintainer's Windows PC, outside every clone, and needs Git
+for Windows (bash, git, ssh-keygen) and a logged-in `gh`. The managing session installs or
+updates it only from a published, immutable release and only after the maintainer's OK:
+
+1. `gh release download vX.Y.Z -R OWNER/repo-standard --pattern 'release-seal*' --dir FOLDER`,
+   into a folder of its own outside every git work tree.
+2. `gh release verify-asset vX.Y.Z FOLDER/FILE -R OWNER/repo-standard` for each of the three
+   files; any failure stops the install.
+3. `FOLDER/config` with the lines `SIGNING_KEY=` the offline key's private file and
+   `ALLOWED_SIGNERS=` the allowed signers file that the hosts trust, principal `maintainer`.
+4. For each repository with `SEAL=yes`, a desktop shortcut "Seal NAME release" with the target
+   `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File
+   "FOLDER\release-seal.ps1" -Repo OWNER/NAME`.
+
+The tool fetches into `FOLDER/mirrors/`, where no hook runs, asks the passphrase only in its own
+dialog, verifies each new seal for `maintainer` before the push, and pushes `seal/vX.Y.Z` alone,
+never with force.

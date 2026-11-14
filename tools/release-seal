@@ -1,0 +1,311 @@
+#!/bin/bash
+# tools/release-seal of repo-standard: the seal of D1 = B. It checks a published release of a
+# repository whose hosts install sealed releases only (SEAL=yes) and, on seal, signs and pushes
+# its seal: the annotated tag seal/vX.Y.Z with the message "<name> vX.Y.Z" on the release's
+# commit, signed with the maintainer's offline SSH key. It is released as an asset of
+# repo-standard and runs outside every clone, from the dialog release-seal.ps1 or a shell:
+#   release-seal versions --repo OWNER/NAME [--home DIR]
+#   release-seal check --repo OWNER/NAME --version X.Y.Z [--home DIR]
+#   release-seal seal --repo OWNER/NAME --version X.Y.Z [--home DIR]
+# versions prints "vX.Y.Z TAB sealed|unsealed" for the published releases that are not
+# pre-releases, newest first. check prints TAB-separated lines, "check ok|FAIL NAME REASON" and
+# "fact NAME VALUE", and exits 0 only when every check passed:
+#   published  the release is published and immutable, neither a draft nor a pre-release
+#   drafted    github-actions[bot] drafted it
+#   commit     the tag's commit is on main
+#   version    VERSION at that commit reads X.Y.Z
+#   verify     the newest run of release.yml for that commit's release event ended in success
+#   unsealed   no seal/vX.Y.Z exists
+# and the facts: commit, pr (the pull request of the commit), base (the newest seal, else the
+# newest release tag, of a lower version) and one "since" line per commit from base to the
+# release, newest first. seal runs the checks again and, when all pass, signs the seal with git
+# tag -s (gpg.format=ssh, the key SIGNING_KEY names, no agent), asking the key's passphrase only
+# through SSH_ASKPASS (by default release-seal-askpass beside this file) with
+# SSH_ASKPASS_REQUIRE=force; verifies it for the principal maintainer against ALLOWED_SIGNERS;
+# pushes exactly refs/tags/seal/vX.Y.Z without force; and reads it back from the remote. The tag
+# carries git's user.name and user.email as its tagger, and nothing else of this machine.
+# Its home (--home, else $RELEASE_SEAL_HOME, else the folder of this file) lies outside every git
+# work tree and holds "config", lines SIGNING_KEY=<private key file>, ALLOWED_SIGNERS=<file> and
+# optionally GIT_BASE=<URL> (https://github.com by default), and "mirrors/", the bare mirrors it
+# fetches into: tags without force, so a tag that moved stops it, and no hook runs there. It never
+# runs a file of a repository, and gh only reads. Exit 0; 1 a check failed or the seal was
+# refused; 2 a step that cannot run; 64 usage.
+
+# The gh calls, shared with tests/release-seal.bats, which sources this file with SEAL_LIB=1.
+JQ_RELEASE='[.draft, .prerelease, (.immutable // false), (.author.login // ""), (.published_at // "")] | @tsv'
+JQ_RUN='.workflow_runs[0].conclusion // "none"'
+JQ_PR='.[0] // empty | "#\(.number) \(.title)"'
+JQ_TAGS='.[] | select((.draft | not) and (.prerelease | not)) | .tag_name'
+
+# gh, read-only: gh api with GET only and without a field, which would make it POST. Anything
+# else is refused with 97 before gh runs.
+ghr() {
+    local arg prev=''
+    [[ ${1:-} == api ]] || return 97
+    for arg in "$@"; do
+        case $prev in
+            -X | --method) [[ $arg == GET ]] || return 97 ;;
+        esac
+        case $arg in
+            -f | -F | --field | --raw-field | --input | -f?* | -F?* | --field=* | --raw-field=* | --input=*)
+                return 97 ;;
+            --method=* | -X?*) [[ $arg == --method=GET || $arg == -XGET ]] || return 97 ;;
+        esac
+        prev=$arg
+    done
+    gh "$@"
+}
+
+# True when version $1 is newer than version $2.
+newer() {
+    [[ $1 != "$2" && $(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1) == "$1" ]]
+}
+
+[[ ${SEAL_LIB:-} != 1 ]] || return 0
+
+set -euo pipefail
+usage() {
+    echo "usage: release-seal versions --repo OWNER/NAME [--home DIR]" >&2
+    echo "       release-seal check|seal --repo OWNER/NAME --version X.Y.Z [--home DIR]" >&2
+    exit 64
+}
+say() { printf 'release-seal: %s\n' "$*" >&2; }
+fail() {
+    say "$@"
+    exit 2
+}
+
+(( $# )) || usage
+command=$1
+shift
+case $command in
+    versions | check | seal) ;;
+    *) usage ;;
+esac
+repo=''
+version=''
+home=${RELEASE_SEAL_HOME:-}
+while (( $# )); do
+    case $1 in
+        --repo) [[ ${2:-} =~ ^[A-Za-z0-9-]+/[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || usage; repo=$2; shift ;;
+        --version)
+            [[ ${2:-} =~ ^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$ ]] || usage
+            version=$2
+            shift
+            ;;
+        --home) [[ -n ${2:-} ]] || usage; home=$2; shift ;;
+        *) usage ;;
+    esac
+    shift
+done
+[[ -n $repo ]] || usage
+if [[ $command == versions ]]; then [[ -z $version ]] || usage; else [[ -n $version ]] || usage; fi
+name=${repo#*/}
+tag=v$version
+
+# Git finds each repository by its folder, never by a variable a caller left.
+while IFS= read -r var; do unset "$var"; done < <(git rev-parse --local-env-vars)
+here=$(CDPATH='' cd -- "${BASH_SOURCE[0]%/*}" && pwd)
+home=${home:-$here}
+[[ -d $home ]] || fail "its home is no folder"
+home=$(CDPATH='' cd -- "$home" && pwd)
+if [[ $(git -C "$home" rev-parse --is-inside-work-tree 2> /dev/null) == true ]]; then
+    fail "its home must be outside every git work tree: install it from the release, outside every clone"
+fi
+[[ -f $home/config ]] || fail "its home has no config"
+signing_key=''
+allowed=''
+git_base=https://github.com
+n=0
+while IFS= read -r line || [[ -n $line ]]; do
+    n=$((n + 1))
+    line=${line%$'\r'}
+    case $line in
+        '' | '#'*) ;;
+        SIGNING_KEY=?*) signing_key=${line#*=} ;;
+        ALLOWED_SIGNERS=?*) allowed=${line#*=} ;;
+        GIT_BASE=?*) git_base=${line#*=} ;;
+        *) fail "the config line $n is not a known KEY=value" ;;
+    esac
+done < "$home/config"
+[[ -n $signing_key ]] || fail "the config's SIGNING_KEY is missing"
+[[ -n $allowed ]] || fail "the config's ALLOWED_SIGNERS is missing"
+# A relative path in the config counts from the home, since git runs in a mirror.
+absolute() {
+    case $1 in
+        /* | [A-Za-z]:[/\\]*) printf '%s\n' "$1" ;;
+        *) printf '%s/%s\n' "$home" "$1" ;;
+    esac
+}
+signing_key=$(absolute "$signing_key")
+allowed=$(absolute "$allowed")
+[[ -f $signing_key ]] || fail "the config's SIGNING_KEY names no file"
+[[ -f $allowed ]] || fail "the config's ALLOWED_SIGNERS names no file"
+
+umask 077
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/release-seal.XXXXXX") || fail "cannot create a temp folder"
+trap 'rm -rf -- "$tmp"' EXIT
+# ssh-keygen reads the allowed signers with LF line ends only.
+tr -d '\r' < "$allowed" > "$tmp/allowed_signers" || fail "cannot read the config's ALLOWED_SIGNERS"
+allowed=$tmp/allowed_signers
+
+# The mirror, bare, with an empty hooks folder of the tool's own that no config can replace.
+url=${git_base%/}/$repo.git
+mirror=$home/mirrors/$repo.git
+nohooks=$home/no-hooks
+mkdir -p "$nohooks" "${mirror%/*}" || fail "cannot create the mirror's folder"
+[[ -z $(ls -A "$nohooks") ]] || fail "the folder no-hooks of its home is not empty"
+mgit() {
+    git -C "$mirror" -c core.hooksPath="$nohooks" "$@"
+}
+if [[ ! -d $mirror ]]; then
+    git -c core.hooksPath="$nohooks" init -q --bare --template="$nohooks" "$mirror" ||
+        fail "cannot create the mirror"
+    mgit config core.hooksPath "$nohooks"
+fi
+# Fetch main and the tags; a tag fetched before must not have moved.
+if ! mgit fetch --no-tags --no-write-fetch-head "$url" \
+    '+refs/heads/main:refs/remotes/origin/main' 'refs/tags/*:refs/tags/*' > /dev/null 2> "$tmp/fetch"; then
+    if grep -q 'would clobber existing tag' "$tmp/fetch"; then
+        fail "a tag moved since the last fetch: seal nothing until you know why"
+    fi
+    fail "cannot fetch $repo"
+fi
+
+if [[ $command == versions ]]; then
+    ghr api --paginate "repos/$repo/releases?per_page=100" --jq "$JQ_TAGS" > "$tmp/tags" 2> /dev/null ||
+        fail "cannot read the releases of $repo"
+    tr -d '\r' < "$tmp/tags" | { grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true; } |
+        sort -u | sort -r -V | while IFS= read -r t; do
+        if mgit rev-parse -q --verify "refs/tags/seal/$t" > /dev/null 2>&1; then
+            printf '%s\tsealed\n' "$t"
+        else
+            printf '%s\tunsealed\n' "$t"
+        fi
+    done
+    exit 0
+fi
+
+failed=0
+# Print the check line NAME ok|FAIL REASON.
+report() {
+    printf 'check\t%s\t%s\t%s\n' "$2" "$1" "$3"
+    [[ $2 == ok ]] || failed=1
+}
+
+# The newest tag PREFIX X.Y.Z ($1 is seal/v or v) of the mirror with X.Y.Z below the version.
+below() {
+    local t v best=''
+    while IFS= read -r t; do
+        v=${t#"$1"}
+        [[ $v =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || continue
+        newer "$version" "$v" || continue
+        if [[ -z $best ]] || newer "$v" "$best"; then best=$v; fi
+    done < <(mgit for-each-ref --format='%(refname:strip=2)' "refs/tags/$1*")
+    [[ -z $best ]] || printf '%s%s\n' "$1" "$best"
+}
+
+# Print the facts of the release at the commit $1.
+facts() {
+    local commit=$1 pr base l
+    printf 'fact\tcommit\t%s\n' "$commit"
+    pr=$(ghr api "repos/$repo/commits/$commit/pulls" --jq "$JQ_PR" 2> /dev/null | head -n 1 | tr '\t\r' '  ') ||
+        pr=''
+    printf 'fact\tpr\t%s\n' "${pr:-none}"
+    base=$(below seal/v)
+    [[ -n $base ]] || base=$(below v)
+    printf 'fact\tbase\t%s\n' "${base:-none}"
+    if [[ -n $base ]]; then
+        mgit log --format='%h %s' -n 200 "refs/tags/$base^{commit}..$commit"
+    else
+        mgit log --format='%h %s' -n 20 "$commit"
+    fi | tr '\t\r' '  ' | while IFS= read -r l; do printf 'fact\tsince\t%s\n' "$l"; done
+}
+
+# Run the checks and print their lines and the facts; failed=1 when one failed.
+run_checks() {
+    local state draft pre immutable author published commit run
+    if state=$(ghr api "repos/$repo/releases/tags/$tag" --jq "$JQ_RELEASE" 2> /dev/null) &&
+        [[ -n $state ]]; then
+        IFS=$'\t' read -r draft pre immutable author published <<< "${state%$'\r'}"
+        if [[ $draft != false ]]; then report published FAIL "$tag is a draft"
+        elif [[ $pre != false ]]; then report published FAIL "$tag is a pre-release"
+        elif [[ $immutable != true ]]; then report published FAIL "$tag is not immutable"
+        elif [[ -z $published ]]; then report published FAIL "$tag has no publish date"
+        else report published ok "published ${published%%T*}, immutable"
+        fi
+        if [[ $author == 'github-actions[bot]' ]]; then report drafted ok "drafted by github-actions[bot]"
+        else report drafted FAIL "$tag was drafted by ${author:-nobody}"
+        fi
+    else
+        report published FAIL "no release $tag"
+        report drafted FAIL "no release $tag"
+    fi
+    commit=$(mgit rev-parse -q --verify "refs/tags/$tag^{commit}" 2> /dev/null) || commit=''
+    if [[ -z $commit ]]; then
+        report commit FAIL "no tag $tag"
+        report version FAIL "no tag $tag"
+        report verify FAIL "no tag $tag"
+    else
+        if mgit merge-base --is-ancestor "$commit" refs/remotes/origin/main 2> /dev/null; then
+            report commit ok "${commit:0:12} is on main"
+        else
+            report commit FAIL "the commit of $tag is not on main"
+        fi
+        if [[ $(mgit show "$commit:VERSION" 2> /dev/null | tr -d '\r') == "$version" ]]; then
+            report version ok "VERSION reads $version"
+        else
+            report version FAIL "VERSION at the commit of $tag does not read $version"
+        fi
+        run=$(ghr api "repos/$repo/actions/workflows/release.yml/runs?event=release&head_sha=$commit&per_page=1" \
+            --jq "$JQ_RUN" 2> /dev/null | tr -d '\r') || run=unreadable
+        if [[ $run == success ]]; then report verify ok "the verify run of $tag is green"
+        else report verify FAIL "the verify run of $tag ended with ${run:-none}"
+        fi
+    fi
+    if mgit rev-parse -q --verify "refs/tags/seal/$tag" > /dev/null 2>&1; then
+        report unsealed FAIL "seal/$tag exists"
+    else
+        report unsealed ok "no seal/$tag yet"
+    fi
+    [[ -z $commit ]] || facts "$commit"
+}
+
+run_checks > "$tmp/checks"
+cat "$tmp/checks"
+(( failed == 0 )) || exit 1
+[[ $command == seal ]] || exit 0
+
+# Sign the seal in the mirror, the passphrase through the dialog only.
+mgit var GIT_COMMITTER_IDENT > /dev/null 2>&1 ||
+    fail "git has no user.name and user.email for the seal's tagger"
+askpass=${SSH_ASKPASS:-$here/release-seal-askpass}
+[[ -x $askpass ]] || fail "no passphrase dialog: SSH_ASKPASS names no program"
+commit=$(mgit rev-parse "refs/tags/$tag^{commit}")
+if ! env -u SSH_AUTH_SOCK SSH_ASKPASS="$askpass" SSH_ASKPASS_REQUIRE=force \
+    git -C "$mirror" -c core.hooksPath="$nohooks" -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen \
+    -c user.signingKey="$signing_key" tag -s -m "$name $tag" "seal/$tag" "$commit" \
+    > /dev/null 2> "$tmp/sign" < /dev/null; then
+    mgit tag -d "seal/$tag" > /dev/null 2>&1 || true
+    say "the seal could not be signed: a wrong passphrase, a cancelled dialog or an unreadable key; nothing was pushed"
+    exit 1
+fi
+# The hosts' check, before anything leaves this machine.
+if ! mgit -c gpg.ssh.program=ssh-keygen -c gpg.ssh.allowedSignersFile="$allowed" \
+    verify-tag "seal/$tag" > /dev/null 2> "$tmp/verify" ||
+    ! grep -q 'Good "git" signature for maintainer with' "$tmp/verify" ||
+    [[ $(mgit for-each-ref --format='%(contents:subject)' "refs/tags/seal/$tag") != "$name $tag" ]]; then
+    mgit tag -d "seal/$tag" > /dev/null 2>&1 || true
+    say "the new seal does not verify for maintainer against ALLOWED_SIGNERS; nothing was pushed"
+    exit 1
+fi
+sealed=$(mgit rev-parse "refs/tags/seal/$tag")
+if ! mgit -c push.gpgSign=false push --quiet "$url" "refs/tags/seal/$tag:refs/tags/seal/$tag" \
+    2> "$tmp/push"; then
+    mgit tag -d "seal/$tag" > /dev/null 2>&1 || true
+    say "the push of seal/$tag failed, so nothing was sealed; check again before you seal"
+    exit 1
+fi
+remote=$(mgit ls-remote "$url" "refs/tags/seal/$tag" 2> /dev/null | head -n 1 | cut -f 1) || remote=''
+[[ $remote == "$sealed" ]] || fail "the remote seal/$tag is not the seal just pushed"
+printf 'sealed\tseal/%s\t%s\n' "$tag" "$sealed"

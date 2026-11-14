@@ -22,12 +22,15 @@ markers() {
         -e 's/^standard://'
 }
 
-# Print the names of the blocks that blocks/ holds for the file $1, without variants, sorted.
+# Print the names of the blocks that blocks/ holds for the file $1, without variants, sorted. A
+# seal variant is left out: one that replaces a block shares its markers, and a block that exists
+# only as a seal variant gets its markers from tools/sync, only where SEAL=yes.
 block_names() {
     local body
     for body in "$REPO_ROOT/blocks/$1"/*; do
         body=${body##*/}
         body=${body%.md}
+        [[ $body != *@seal ]] || continue
         printf '%s\n' "${body%%@*}"
     done | LC_ALL=C sort -u
 }
@@ -38,7 +41,7 @@ block_names() {
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
     for key in NAME VISIBILITY ROLE LICENSE CI_RUNNER CI_STAGES CI_WEEKLY PYTHON PS_MODULES \
         IMAGE_PLATFORMS RELEASE_KIND RELEASE_RUNNER RELEASE_MANIFEST RELEASE_ASSETS VERSION_COPY \
-        PRIVACY_RULES PRIVACY_ALLOW PRIVACY_HISTORY_ACCEPT MAX_BLOB_KB; do
+        SEAL PRIVACY_RULES PRIVACY_ALLOW PRIVACY_HISTORY_ACCEPT MAX_BLOB_KB; do
         grep -q -E "^(# )?$key=" "$T/standard.conf" || { printf '%s is missing\n' "$key" >&2; return 1; }
     done
     [ "$(sh "$REPO_ROOT/.github/standard/bin/conf" --get PRIVACY_RULES "$T/standard.conf")" = base ]
@@ -70,6 +73,18 @@ block_names() {
     done
     for section in '## Trust model' '## Known exposure' '## Network' '## Data that stays private'; do
         grep -q -x -F -e "$section" "$T/SECURITY.md"
+    done
+}
+
+@test "the SECURITY.md template holds no seal block's markers, and says where tools/sync adds them" {
+    local name
+    run markers "$T/SECURITY.md"
+    for name in "$REPO_ROOT"/blocks/SECURITY.md/*@seal.md; do
+        name=${name##*/}
+        name=${name%.md}
+        name=${name%@seal}
+        [[ $output != *" $name"* ]] || { printf 'the template holds the markers of %s\n' "$name" >&2; return 1; }
+        grep -q -F -e "$name" "$T/SECURITY.md"
     done
 }
 
