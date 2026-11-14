@@ -7,6 +7,27 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+### Added
+
+- The key `SEAL` (`yes` or `no`, default `no`; never with `RELEASE_KIND=legacy`) and the profile
+  `seal`: under `SEAL=yes` the block `CONTRIBUTING.md#releasing@seal` replaces `releasing` with
+  the Seal step, and `SECURITY.md#sealed-releases@seal` says what the hosts check. `standard-check`
+  and `tools/sync` select them, and without `SEAL=yes` a block that exists only as a seal variant
+  must be absent. A repository that sets `SEAL=yes` adds the markers of `sealed-releases` to its
+  `SECURITY.md` first (phase 3)
+- `tools/release-seal`, the seal tool of D1 = B: `check` shows a published release's checks and
+  facts, and `seal` signs the annotated tag `seal/vX.Y.Z` with the offline SSH key through
+  `SSH_ASKPASS` only, verifies it for `maintainer` and pushes that one tag, without force, from a
+  mirror of its own where no hook runs; `gh` only reads (phase 3)
+- `tools/release-seal.ps1`, its dialog in Windows PowerShell 5.1 with Windows Forms, which enables
+  Seal only when every check passed, and `tools/release-seal-askpass`, which shows its masked
+  passphrase dialog for ssh-keygen. The three files are assets of each release, and
+  `ci/test.ps1` runs their Pester tests (phase 3)
+- The check `seal` of `tools/status`: the newest release of a `SEAL=yes` repository warns for 24
+  hours without its seal, then fails; a seal off its release's commit, with another message,
+  unannotated, moved or vanished fails; with `--allowed-signers FILE`, each seal must verify for
+  `maintainer` in the sweep's mirror (phase 3)
+
 ## [1.0.1] - 2026-11-14
 
 ### Fixed

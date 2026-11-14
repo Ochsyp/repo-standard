@@ -29,6 +29,9 @@ edits the copies; `.github/standard/MANIFEST` lists them.
 - `tools/sync`: writes a published release into a repository's worktree, run from a clone of
   its tag; `--init` adopts a repository. `tools/status`: the read-only daily audit of the
   repositories.
+- `tools/release-seal`, `tools/release-seal.ps1` and `tools/release-seal-askpass`: the seal tool
+  of the repositories with `SEAL=yes`, its dialog and its passphrase dialog, released as assets
+  and installed outside every clone (CONTRIBUTING.md, Release contract).
 - `templates/`: the starters of an adoption: the config, CHANGELOG.md, CONTRIBUTING.md,
   SECURITY.md, tests/helpers.bash and ci/ per stack.
 - `ci/test` and `ci/test.ps1` (Windows) and `ci/system` (Linux): this repository's CI stages.
@@ -37,9 +40,8 @@ edits the copies; `.github/standard/MANIFEST` lists them.
 
 ## Status
 
-Phase 1 (hooks and checks) and the first pull request of phase 2 (the workflows, the vendored
-tools and the secret scan) are merged. The second brings `tools/sync`, `tools/status` and the
-templates; the third releases version 1.0.0.
+Versions 1.0.0 and 1.0.1 are published. Phase 3 brings the seal: the key `SEAL`, the seal
+blocks, the seal tool and the seal check of `tools/status`, for version 1.1.0.
 
 ## Checks
 
@@ -48,6 +50,8 @@ templates; the third releases version 1.0.0.
 - `sh .githooks/privacy-scan --tracked` and `sh tools/manifest --check`.
 - `sh tools/consumer-suite [--shape private] DIR`, then `bats DIR/.github/standard/tests/`: the
   standard's suites where only the vendored files exist, as in a consumer.
+- On Windows, `ci/test.ps1` under Windows PowerShell 5.1 with the pinned modules: the Pester
+  tests of the seal dialog (CONTRIBUTING.md, Checks).
 - CI: `ci.yml` runs the job `standard` (every vendored suite on Linux, the lint, the privacy
   packs, the MANIFEST and the pull request checks), the stage `test` on Windows (`ci/test`, then
   the smoke test of the pinned PowerShell modules), the stage `system` on Linux (the suites,

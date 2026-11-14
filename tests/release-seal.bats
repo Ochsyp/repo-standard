@@ -304,6 +304,16 @@ refute_sealed() {
     [[ $stderr != *BOGUS* ]]
 }
 
+@test "the seal tool's three files are release assets of repo-standard, kept in its archive" {
+    local file assets
+    assets=" $(sh "$REPO_ROOT/.github/standard/bin/conf" --get RELEASE_ASSETS "$REPO_ROOT/.github/standard.conf") "
+    for file in tools/release-seal tools/release-seal-askpass tools/release-seal.ps1; do
+        [[ $assets == *" $file "* ]] || { printf '%s is no release asset\n' "$file" >&2; return 1; }
+        git -C "$REPO_ROOT" ls-files --error-unmatch -- "$file" > /dev/null
+        [ "$(git -C "$REPO_ROOT" check-attr export-ignore -- "$file" | awk '{ print $NF }')" != set ]
+    done
+}
+
 @test "usage: a command, OWNER/NAME and, for check and seal, a version X.Y.Z" {
     run_seal
     [ "$status" -eq 64 ]
