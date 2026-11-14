@@ -275,6 +275,16 @@ contract_ci() {
         printf 'ci.yml: all-passed needs %s, not every other job\n' "$needs" >&2
         bad=1
     fi
+    # The jobs that run the standard's suites see the release tags: release-meta.bats checks a
+    # repository against its tags, and without them a published release looks as if it waits.
+    if [[ $(flat "$1" | awk -F '\t' '$1 == "jobs.standard.steps.0.with.fetch-depth" { print $2 }') != 0 ]]; then
+        printf 'ci.yml: the standard job checks out without the history and the tags\n' >&2
+        bad=1
+    fi
+    if [[ $(flat "$1" | awk -F '\t' '$1 == "jobs.test.steps.0.with.fetch-tags" { print $2 }') != true ]]; then
+        printf 'ci.yml: the test job checks out without the tags\n' >&2
+        bad=1
+    fi
     return "$bad"
 }
 
@@ -294,7 +304,8 @@ contract_release() {
     flat "$1" > "$flat"
     for job in draft promote verify; do
         want=.github/standard/bin
-        [[ $job != verify ]] || want='.github/standard/bin ci'
+        # release-verify reads the config through conf, which needs the rule packs in .githooks.
+        [[ $job != verify ]] || want='.github/standard/bin .githooks ci'
         got=$(awk -F '\t' -v p="jobs.$job.steps.0.with.sparse-checkout" '$1 == p { print $2 }' "$flat" | paste -s -d ' ' -)
         [[ $got == "$want" ]] ||
             { printf 'release.yml: job %s checks out %s, not the directories %s\n' "$job" "${got:-everything}" "$want" >&2; bad=1; }
@@ -491,6 +502,10 @@ checked_workflows() {
         "$WF/ci.yml" > "$FIX/needs.yml"
     run contract_ci "$FIX/needs.yml"
     [ "$status" -eq 1 ]
+    grep -v -E '^ +fetch-tags: true$' "$WF/ci.yml" > "$FIX/tagless.yml"
+    run contract_ci "$FIX/tagless.yml"
+    [ "$status" -eq 1 ]
+    [[ $output == *"the test job checks out without the tags"* ]]
 }
 
 @test "secret-scan.yml keeps its contract" {
@@ -514,7 +529,7 @@ checked_workflows() {
         "$WF/release.yml" > "$FIX/glob.yml"
     run contract_release "$FIX/glob.yml"
     [ "$status" -eq 1 ]
-    [[ $output == *"job verify checks out .github/standard/bin ci/release-verify*"* ]]
+    [[ $output == *"job verify checks out .github/standard/bin .githooks ci/release-verify*"* ]]
     sed '/^  build:$/,/^  build-image:$/ s/contents: read/contents: write/' "$WF/release.yml" > "$FIX/write.yml"
     run contract_release "$FIX/write.yml"
     [ "$status" -eq 1 ]

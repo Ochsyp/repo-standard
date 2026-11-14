@@ -254,6 +254,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             .github/standard/bin
+            .githooks
             ci
           sparse-checkout-cone-mode: true
       - name: Check the published release, read-only

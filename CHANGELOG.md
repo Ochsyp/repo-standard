@@ -7,6 +7,17 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The verify job of `release.yml` checks out `.githooks/` too: `release-verify` reads the config
+  through `conf`, which needs the rule packs, so the check of a published release failed. The
+  v1.0.0 release itself is sound. `tests/release-flow.bats` runs the tools of the draft, promote
+  and verify jobs in the sparse checkouts that release.yml gives them
+- `release-prepare` stages `VERSION` before it rebuilds the MANIFEST in repo-standard, so the
+  MANIFEST of a release names its version
+- The test job of `ci.yml` fetches the tags, so a suite that checks the repository's release
+  state, as `release-meta.bats` does, sees a published release as published
+
 ## [1.0.0] - 2026-11-14
 
 ### Added
