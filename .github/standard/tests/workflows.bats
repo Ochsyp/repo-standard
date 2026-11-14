@@ -275,6 +275,16 @@ contract_ci() {
         printf 'ci.yml: all-passed needs %s, not every other job\n' "$needs" >&2
         bad=1
     fi
+    # The jobs that run the standard's suites see the release tags: release-meta.bats checks a
+    # repository against its tags, and without them a published release looks as if it waits.
+    if [[ $(flat "$1" | awk -F '\t' '$1 == "jobs.standard.steps.0.with.fetch-depth" { print $2 }') != 0 ]]; then
+        printf 'ci.yml: the standard job checks out without the history and the tags\n' >&2
+        bad=1
+    fi
+    if [[ $(flat "$1" | awk -F '\t' '$1 == "jobs.test.steps.0.with.fetch-tags" { print $2 }') != true ]]; then
+        printf 'ci.yml: the test job checks out without the tags\n' >&2
+        bad=1
+    fi
     return "$bad"
 }
 
@@ -492,6 +502,10 @@ checked_workflows() {
         "$WF/ci.yml" > "$FIX/needs.yml"
     run contract_ci "$FIX/needs.yml"
     [ "$status" -eq 1 ]
+    grep -v -E '^ +fetch-tags: true$' "$WF/ci.yml" > "$FIX/tagless.yml"
+    run contract_ci "$FIX/tagless.yml"
+    [ "$status" -eq 1 ]
+    [[ $output == *"the test job checks out without the tags"* ]]
 }
 
 @test "secret-scan.yml keeps its contract" {

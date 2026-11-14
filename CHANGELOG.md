@@ -15,6 +15,8 @@ Each version is the GitHub release `vX.Y.Z`.
   and verify jobs in the sparse checkouts that release.yml gives them
 - `release-prepare` stages `VERSION` before it rebuilds the MANIFEST in repo-standard, so the
   MANIFEST of a release names its version
+- The test job of `ci.yml` fetches the tags, so a suite that checks the repository's release
+  state, as `release-meta.bats` does, sees a published release as published
 
 ## [1.0.0] - 2026-11-14
 

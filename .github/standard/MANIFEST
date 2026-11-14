@@ -41,8 +41,8 @@ file    all      4b3f1f61d80540219b6f450530d8960db2482211  100755  .github/stand
 file    all      0dc7bf3a939fcbe91f4e89701b19d8374d0f9698  100755  .github/standard/tests/stub-bin/docker
 file    all      869492e83d7f59aee5846419c4e0991afa5989ed  100755  .github/standard/tests/stub-bin/gh
 file    all      b9229271396615e2fab9ef1720eeaac20a4bb26f  100755  .github/standard/tests/stub-bin/gitleaks
-file    all      7c4e6fd48205775f16fc09da607f89a573560032  100755  .github/standard/tests/workflows.bats
-file    all      16b566bad89674d6d55c3141e7dbdd474b56d745  100644  .github/workflows/ci.yml
+file    all      b519534bc6faff8cb536f8218a6a3ffe9bb70b17  100755  .github/standard/tests/workflows.bats
+file    all      e2411c3f548af10d6715c0974f91d368f433f7d3  100644  .github/workflows/ci.yml
 file    release  486fd4f3bd2bb61b6dba1e79d70af663c49fd51a  100644  .github/workflows/image.yml
 file    release  ed843ed8aa803227cf4e33641615280c24d5de66  100644  .github/workflows/release.yml
 file    all      ecbe1d8c58d31984b6d5b673ccc400e1edb2747e  100644  .github/workflows/secret-scan.yml
