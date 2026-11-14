@@ -7,6 +7,8 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-14
+
 ### Fixed
 
 - The verify job of `release.yml` checks out `.githooks/` too: `release-verify` reads the config
@@ -121,5 +123,6 @@ Each version is the GitHub release `vX.Y.Z`.
   request passes; `standard-check` still holds the release pull request to the whole MANIFEST
   (phase 2)
 
-[Unreleased]: https://github.com/Ochsyp/repo-standard/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Ochsyp/repo-standard/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Ochsyp/repo-standard/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Ochsyp/repo-standard/releases/tag/v1.0.0

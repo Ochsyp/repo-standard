@@ -1,6 +1,6 @@
-# Repository standard 1.0.0. Written by tools/manifest; never edit it.
+# Repository standard 1.0.1. Written by tools/manifest; never edit it.
 # type  profile  blob-id                                   mode    path[#block[@variant]]
-standard 1.0.0
+standard 1.0.1
 file    all      941c1c30e14277895654fb9805bef6308a79601c  100755  .githooks/commit-msg
 file    all      69c09a66ff4d3969d848b4d93c56ca3ef308a67d  100644  .githooks/lib.sh
 file    all      d5c698aa8c8da0560bb52304c8aafca57a0bf5c3  100755  .githooks/pre-commit
