@@ -260,6 +260,37 @@ block_of() {
     copies_match 'all|private'
 }
 
+@test "sync under SEAL=yes writes the seal variants; a later SEAL=yes needs the seal block's markers first" {
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar SEAL=yes
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(block_of "$TGT/CONTRIBUTING.md" releasing)" = "$(cat "$SRC/blocks/CONTRIBUTING.md/releasing@seal.md")" ]
+    [ "$(block_of "$TGT/SECURITY.md" sealed-releases)" = \
+        "$(cat "$SRC/blocks/SECURITY.md/sealed-releases@seal.md")" ]
+    [[ $output == *"- SECURITY.md#sealed-releases"* ]]
+    # Without SEAL, the plain releasing block and no seal block.
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(block_of "$TGT/CONTRIBUTING.md" releasing)" = "$(cat "$SRC/blocks/CONTRIBUTING.md/releasing.md")" ]
+    run grep -c -F 'standard:begin sealed-releases' "$TGT/SECURITY.md"
+    [ "$output" = 0 ]
+    git -C "$TGT" add -A
+    git -C "$TGT" -c core.hooksPath=no-hooks commit -q -m "chore: adopt"
+    # Setting SEAL=yes later: sync refuses until SECURITY.md holds the markers.
+    printf 'SEAL=yes\n' >> "$TGT/.github/standard.conf"
+    run_sync --to "$TGT"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"SECURITY.md: the markers of the block sealed-releases are missing"* ]]
+    printf '%s\n' '<!-- standard:begin sealed-releases -->' '<!-- standard:end sealed-releases -->' \
+        >> "$TGT/SECURITY.md"
+    run_sync --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(block_of "$TGT/CONTRIBUTING.md" releasing)" = "$(cat "$SRC/blocks/CONTRIBUTING.md/releasing@seal.md")" ]
+    [ "$(block_of "$TGT/SECURITY.md" sealed-releases)" = \
+        "$(cat "$SRC/blocks/SECURITY.md/sealed-releases@seal.md")" ]
+}
+
 @test "sync deletes the files the release drops, and refuses a target that is repo-standard itself" {
     local line
     make_target NAME=example VISIBILITY=private LICENSE=none RELEASE_KIND=legacy

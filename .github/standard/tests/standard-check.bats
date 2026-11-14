@@ -74,6 +74,25 @@ commit_unchecked() {
     git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "$1"
 }
 
+# Add three blocks to $REPO's MANIFEST and stage it: a releasing block (profile release), its
+# seal variant, and a block that exists only as a seal variant (both profile seal).
+add_seal_blocks() {
+    mkdir -p "$BODIES/CONTRIBUTING.md"
+    printf '%s\n' '## Releasing' '' 'Publish in the browser.' > "$BODIES/CONTRIBUTING.md/releasing.md"
+    printf '%s\n' '## Releasing' '' 'Publish in the browser, then seal.' \
+        > "$BODIES/CONTRIBUTING.md/releasing@seal.md"
+    printf '%s\n' '## Sealed releases' '' 'Hosts install a sealed release only.' \
+        > "$BODIES/SECURITY.md/sealed-releases@seal.md"
+    {
+        printf 'block release %s - CONTRIBUTING.md#releasing\n' "$(body_id CONTRIBUTING.md/releasing.md)"
+        printf 'block seal %s - CONTRIBUTING.md#releasing@seal\n' \
+            "$(body_id CONTRIBUTING.md/releasing@seal.md)"
+        printf 'block seal %s - SECURITY.md#sealed-releases@seal\n' \
+            "$(body_id SECURITY.md/sealed-releases@seal.md)"
+    } >> "$REPO/.github/standard/MANIFEST"
+    git -C "$REPO" add .github/standard/MANIFEST
+}
+
 # Build a public repository at $REPO that holds the standard, committed on main, and switch to
 # feat/example. The copies are this repository's hooks and bin/.
 make_consumer() {
@@ -173,6 +192,38 @@ make_consumer() {
     git -C "$REPO" add .github/standard.conf
     check --staged
     [ "$status" -eq 0 ]
+}
+
+@test "SEAL=yes takes a block's seal variant and needs a seal-only block, which SEAL=no refuses" {
+    make_consumer
+    add_seal_blocks
+    block releasing md CONTRIBUTING.md/releasing.md > "$REPO/CONTRIBUTING.md"
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    # Without SEAL=yes, a block that exists only as a seal variant must not be there.
+    { printf '# Security\n\n'; block reporting md SECURITY.md/reporting@public.md
+      block sealed-releases md SECURITY.md/sealed-releases@seal.md; } > "$REPO/SECURITY.md"
+    git -C "$REPO" add SECURITY.md
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"SECURITY.md#sealed-releases@seal: the block is here, but the config does not set SEAL=yes"* ]]
+    # Under SEAL=yes the seal variant replaces the releasing block, and the seal-only block counts.
+    write_config VISIBILITY=public PRIVACY_RULES=base SEAL=yes
+    git -C "$REPO" add .github/standard.conf
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"CONTRIBUTING.md#releasing@seal: the block differs from the MANIFEST"* ]]
+    [ "$(grep -c '^standard-check: [A-Z]' <<< "$stderr")" -eq 1 ]
+    block releasing md CONTRIBUTING.md/releasing@seal.md > "$REPO/CONTRIBUTING.md"
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    { printf '# Security\n\n'; block reporting md SECURITY.md/reporting@public.md; } > "$REPO/SECURITY.md"
+    git -C "$REPO" add SECURITY.md
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"SECURITY.md#sealed-releases@seal: the block's markers are missing"* ]]
 }
 
 @test "LICENSE follows the LICENSE key" {
