@@ -87,7 +87,7 @@ version=''
 home=${RELEASE_SEAL_HOME:-}
 while (( $# )); do
     case $1 in
-        --repo) [[ ${2:-} =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]] || usage; repo=$2; shift ;;
+        --repo) [[ ${2:-} =~ ^[A-Za-z0-9-]+/[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || usage; repo=$2; shift ;;
         --version)
             [[ ${2:-} =~ ^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$ ]] || usage
             version=$2
@@ -130,12 +130,24 @@ while IFS= read -r line || [[ -n $line ]]; do
 done < "$home/config"
 [[ -n $signing_key ]] || fail "the config's SIGNING_KEY is missing"
 [[ -n $allowed ]] || fail "the config's ALLOWED_SIGNERS is missing"
+# A relative path in the config counts from the home, since git runs in a mirror.
+absolute() {
+    case $1 in
+        /* | [A-Za-z]:[/\\]*) printf '%s\n' "$1" ;;
+        *) printf '%s/%s\n' "$home" "$1" ;;
+    esac
+}
+signing_key=$(absolute "$signing_key")
+allowed=$(absolute "$allowed")
 [[ -f $signing_key ]] || fail "the config's SIGNING_KEY names no file"
 [[ -f $allowed ]] || fail "the config's ALLOWED_SIGNERS names no file"
 
 umask 077
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/release-seal.XXXXXX") || fail "cannot create a temp folder"
 trap 'rm -rf -- "$tmp"' EXIT
+# ssh-keygen reads the allowed signers with LF line ends only.
+tr -d '\r' < "$allowed" > "$tmp/allowed_signers" || fail "cannot read the config's ALLOWED_SIGNERS"
+allowed=$tmp/allowed_signers
 
 # The mirror, bare, with an empty hooks folder of the tool's own that no config can replace.
 url=${git_base%/}/$repo.git
@@ -163,7 +175,7 @@ fi
 if [[ $command == versions ]]; then
     ghr api --paginate "repos/$repo/releases?per_page=100" --jq "$JQ_TAGS" > "$tmp/tags" 2> /dev/null ||
         fail "cannot read the releases of $repo"
-    tr -d '\r' < "$tmp/tags" | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' |
+    tr -d '\r' < "$tmp/tags" | { grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true; } |
         sort -u | sort -r -V | while IFS= read -r t; do
         if mgit rev-parse -q --verify "refs/tags/seal/$t" > /dev/null 2>&1; then
             printf '%s\tsealed\n' "$t"

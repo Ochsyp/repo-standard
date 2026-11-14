@@ -61,7 +61,7 @@ JQ_RELEASES='.[] | select(.draft | not) | [.id, .tag_name] | @tsv'
 JQ_RELEASE_TEXT='(.name // ""), (.body // "")'
 JQ_GHSA='.[].ghsa_id'
 JQ_LATEST='[.tag_name, ((.published_at // "")[0:10])] | @tsv'
-JQ_SEALABLE='.[] | select((.draft | not) and (.prerelease | not)) | [.tag_name, (.published_at // "")] | @tsv'
+JQ_SEALABLE='.[] | select((.draft | not) and (.prerelease | not)) | [.tag_name, (.published_at // ""), (.author.login // "")] | @tsv'
 JQ_REFS='.[] | [.ref, .object.type, .object.sha] | @tsv'
 JQ_OBJECT='[.object.type, .object.sha] | @tsv'
 JQ_SEAL='[.object.type, .object.sha, (.message | split("\n") | .[0])] | @tsv'
@@ -186,6 +186,11 @@ git_base=${git_base:-https://github.com/$owner}
 umask 077
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/status.XXXXXX") || exit 2
 trap 'rm -rf -- "$tmp"' EXIT
+# A copy with LF line ends at an absolute path, since git reads the file in each mirror.
+if [[ -n $allowed_signers ]]; then
+    tr -d '\r' < "$allowed_signers" > "$tmp/allowed_signers" || exit 2
+    allowed_signers=$tmp/allowed_signers
+fi
 if [[ -f $src/config/private-names ]]; then
     sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$src/config/private-names" | tr -d '\r' > "$tmp/names"
 else
@@ -568,7 +573,7 @@ tag_commit() {
 }
 
 check_seal() {
-    local r=$1 s=$owner/$1 ref type sha v otype osha subject commit tag published newest='' when=''
+    local r=$1 s=$owner/$1 ref type sha v otype osha subject commit tag published author newest='' when=''
     local hours state=$sweep/$1.seals mirror=$sweep/$1.git errors=0
     if ! fetch "$s" .github/standard.conf "$tmp/$r.conf" || ! grep -q -x 'SEAL=yes' "$tmp/$r.conf"; then
         return 0
@@ -601,10 +606,13 @@ check_seal() {
             note FAIL "seal/$tag is not on the commit of $tag"
         fi
     done < "$tmp/$r.seals"
-    # The newest published release that is not a pre-release waits for its Seal click.
+    # The newest published release that is not a pre-release waits for its Seal click. Only the
+    # release workflow's releases count: the seal tool seals no other, and a release that the
+    # owner made by hand before SEAL=yes has its own signed tag.
     if ghr api --paginate "repos/$s/releases?per_page=100" --jq "$JQ_SEALABLE" 2> /dev/null |
         tr -d '\r' > "$tmp/$r.sealable"; then
-        while IFS=$'\t' read -r tag published; do
+        while IFS=$'\t' read -r tag published author; do
+            [[ $author == 'github-actions[bot]' ]] || continue
             [[ $tag =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || continue
             if [[ -z $newest ]] || newer "$tag" "$newest"; then newest=$tag; when=$published; fi
         done < "$tmp/$r.sealable"

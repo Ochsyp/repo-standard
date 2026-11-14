@@ -361,13 +361,14 @@ T100=$(printf 'a%.0s' {1..40})
 T110=$(printf 'b%.0s' {1..40})
 T111=$(printf 'c%.0s' {1..40})
 
-# The stub's view of the SEAL=yes repository example: v1.0.0, and v1.1.0 published at $1; the
-# seal refs come as "ref TAB type TAB sha" lines on stdin.
+# The stub's view of the SEAL=yes repository example: v1.0.0, and v1.1.0 published at $1, both
+# drafted by the release workflow, and v1.2.0, which the owner made by hand; the seal refs come
+# as "ref TAB type TAB sha" lines on stdin.
 seal_view() {
     local r=$OWNER/example
     printf 'NAME=example\nVISIBILITY=private\nRELEASE_KIND=tar\nSEAL=yes\n' |
         gh_reply api -H "$RAW" "repos/$r/contents/.github/standard.conf?ref=main"
-    printf 'v1.1.0\t%s\nv1.0.0\t2026-11-01T10:00:00Z\n' "$1" |
+    printf 'v1.2.0\t2026-11-14T11:00:00Z\texample-owner\nv1.1.0\t%s\tgithub-actions[bot]\nv1.0.0\t2026-11-01T10:00:00Z\tgithub-actions[bot]\n' "$1" |
         gh_reply api --paginate "repos/$r/releases?per_page=100" --jq "$JQ_SEALABLE"
     gh_reply api --paginate "repos/$r/git/matching-refs/tags/seal/v" --jq "$JQ_REFS"
     printf 'commit\t%s\n' "$C100" | gh_reply api "repos/$r/git/ref/tags/v1.0.0" --jq "$JQ_OBJECT"
@@ -384,6 +385,8 @@ seal_view() {
     run_status --checks seal --now 2026-11-15T10:00:00Z example
     [ "$status" -eq 1 ]
     has_line example seal FAIL "v1.1.0 has waited 24 hours for its seal"
+    # The newer v1.2.0 came from the owner's hand, not the release workflow, so it needs no seal.
+    [[ $output != *v1.2.0* ]]
     # A repository without SEAL=yes gets no seal line.
     printf 'NAME=example\nVISIBILITY=private\nRELEASE_KIND=tar\n' |
         gh_reply api -H "$RAW" "repos/$OWNER/example/contents/.github/standard.conf?ref=main"
@@ -457,7 +460,8 @@ seal_view() {
     git -C "$work" -c core.hooksPath=no-hooks push -q "$bare" main v1.1.0 seal/v1.1.0
     commit=$(git -C "$work" rev-parse HEAD)
     seal=$(git -C "$work" rev-parse refs/tags/seal/v1.1.0)
-    printf 'maintainer namespaces="git" %s\n' "$(cat "$BATS_TEST_TMPDIR/key.pub")" > "$BATS_TEST_TMPDIR/signers"
+    # The good file has CRLF line ends, as an editor on Windows may write it.
+    printf 'maintainer namespaces="git" %s\r\n' "$(cat "$BATS_TEST_TMPDIR/key.pub")" > "$BATS_TEST_TMPDIR/signers"
     printf 'maintainer namespaces="git" %s\n' "$(cat "$BATS_TEST_TMPDIR/other.pub")" > "$BATS_TEST_TMPDIR/others"
     mkdir -p "$XDG_CONFIG_HOME/git-privacy"
     printf 'forbidden-term-example\n' > "$DENYLIST"
@@ -466,13 +470,16 @@ seal_view() {
     : | gh_reply api --paginate "repos/$r/releases?per_page=100" --jq "$JQ_RELEASES"
     printf 'NAME=example\nVISIBILITY=private\nRELEASE_KIND=tar\nSEAL=yes\n' |
         gh_reply api -H "$RAW" "repos/$r/contents/.github/standard.conf?ref=main"
-    printf 'v1.1.0\t2026-11-14T10:00:00Z\n' | gh_reply api --paginate "repos/$r/releases?per_page=100" --jq "$JQ_SEALABLE"
+    printf 'v1.1.0\t2026-11-14T10:00:00Z\tgithub-actions[bot]\n' |
+        gh_reply api --paginate "repos/$r/releases?per_page=100" --jq "$JQ_SEALABLE"
     printf 'refs/tags/seal/v1.1.0\ttag\t%s\n' "$seal" |
         gh_reply api --paginate "repos/$r/git/matching-refs/tags/seal/v" --jq "$JQ_REFS"
     printf 'commit\t%s\n' "$commit" | gh_reply api "repos/$r/git/ref/tags/v1.1.0" --jq "$JQ_OBJECT"
     printf 'commit\t%s\texample v1.1.0\n' "$commit" | gh_reply api "repos/$r/git/tags/$seal" --jq "$JQ_SEAL"
+    # A relative path counts from where the run starts, not from the mirror.
+    cd "$BATS_TEST_TMPDIR"
     run_status --checks sweep,seal --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" \
-        --allowed-signers "$BATS_TEST_TMPDIR/signers" --now 2026-11-14T12:00:00Z example
+        --allowed-signers signers --now 2026-11-14T12:00:00Z example
     [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
     has_line example seal ok "v1.1.0 is sealed"
     run_status --checks sweep,seal --sweep "$sweep" --git-base "$BATS_TEST_TMPDIR/remotes" \

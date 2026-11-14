@@ -311,6 +311,81 @@ function Show-SealError {
     [void] [System.Windows.Forms.MessageBox]::Show($Text, 'Seal', 'OK', 'Error')
 }
 
+function Invoke-ReleaseCheck {
+    <# Runs release-seal check for the version picked in the dialog and shows the result. It
+       never throws: an error shows in the status line, with Seal off. #>
+    param(
+        [Parameter(Mandatory = $true)] $Form,
+        [Parameter(Mandatory = $true)] [string] $Shell,
+        [Parameter(Mandatory = $true)] [string] $Slug,
+        [Parameter(Mandatory = $true)] [object[]] $Versions,
+        [string] $Script = (Join-Path -Path $PSScriptRoot -ChildPath 'release-seal')
+    )
+    $control = $Form.Tag
+    $control.Seal.Enabled = $false
+    try {
+        $tag = $Versions[$control.Version.SelectedIndex].Tag
+        $control.Status.Text = "Checking $tag ..."
+        $Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        [System.Windows.Forms.Application]::DoEvents()
+        $result = Invoke-SealCore -BashPath $Shell -Script $Script `
+            -Arguments @('check', '--repo', $Slug, '--version', $tag.Substring(1))
+        Show-SealResult -Form $Form -Result (ConvertFrom-SealOutput -Lines $result.Lines)
+        $control.Status.Text = if ($result.ExitCode -eq 0) {
+            'Every check passed.'
+        } elseif ($result.ExitCode -eq 1) {
+            'A check failed: this release cannot be sealed.'
+        } else {
+            'The checks cannot run: ' + ($result.Errors | Select-Object -Last 1)
+        }
+    } catch {
+        $control.Seal.Enabled = $false
+        $control.Status.Text = 'The checks cannot run: ' + $_.Exception.Message
+    } finally {
+        $Form.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
+}
+
+function Invoke-ReleaseSeal {
+    <# Runs release-seal seal for the version picked in the dialog: the name of the seal pushed,
+       or an empty string. It never throws: an error shows in the status line. #>
+    param(
+        [Parameter(Mandatory = $true)] $Form,
+        [Parameter(Mandatory = $true)] [string] $Shell,
+        [Parameter(Mandatory = $true)] [string] $Slug,
+        [Parameter(Mandatory = $true)] [object[]] $Versions,
+        [string] $Script = (Join-Path -Path $PSScriptRoot -ChildPath 'release-seal')
+    )
+    $control = $Form.Tag
+    $control.Seal.Enabled = $false
+    $control.Cancel.Enabled = $false
+    $control.Version.Enabled = $false
+    try {
+        $tag = $Versions[$control.Version.SelectedIndex].Tag
+        $control.Status.Text = 'Sealing: type the passphrase in the next dialog.'
+        $Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        [System.Windows.Forms.Application]::DoEvents()
+        $result = Invoke-SealCore -BashPath $Shell -Script $Script `
+            -Arguments @('seal', '--repo', $Slug, '--version', $tag.Substring(1))
+        $parsed = ConvertFrom-SealOutput -Lines $result.Lines
+        if ($result.ExitCode -eq 0 -and $parsed.Sealed) {
+            $control.Status.Text = "$($parsed.Sealed) is sealed and pushed."
+            return $parsed.Sealed
+        }
+        if (@($parsed.Checks).Count -gt 0) { Show-SealResult -Form $Form -Result $parsed }
+        $control.Seal.Enabled = $false
+        $control.Status.Text = 'Not sealed: ' + ($result.Errors | Select-Object -Last 1)
+    } catch {
+        $control.Seal.Enabled = $false
+        $control.Status.Text = 'Not sealed: ' + $_.Exception.Message
+    } finally {
+        $Form.Cursor = [System.Windows.Forms.Cursors]::Default
+        $control.Cancel.Enabled = $true
+        $control.Version.Enabled = $true
+    }
+    return ''
+}
+
 function Invoke-SealDialog {
     <# The seal dialog of the repository given: 0 sealed, 1 not sealed, 2 cannot run. #>
     param([Parameter(Mandatory = $true)] [string] $Slug, [string] $BashPath)
@@ -335,46 +410,16 @@ function Invoke-SealDialog {
     $form = Get-SealForm -Name $Slug -Versions $versions
     $control = $form.Tag
     $state = @{ Sealed = $false }
-    $check = {
-        $tag = $versions[$control.Version.SelectedIndex].Tag
-        $control.Seal.Enabled = $false
-        $control.Status.Text = "Checking $tag ..."
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-        [System.Windows.Forms.Application]::DoEvents()
-        $result = Invoke-SealCore -BashPath $shell -Arguments @('check', '--repo', $Slug, '--version', $tag.Substring(1))
-        Show-SealResult -Form $form -Result (ConvertFrom-SealOutput -Lines $result.Lines)
-        $form.Cursor = [System.Windows.Forms.Cursors]::Default
-        $control.Status.Text = if ($result.ExitCode -eq 0) {
-            'Every check passed.'
-        } elseif ($result.ExitCode -eq 1) {
-            'A check failed: this release cannot be sealed.'
-        } else {
-            'The checks cannot run: ' + ($result.Errors | Select-Object -Last 1)
-        }
-    }
-    $control.Version.add_SelectedIndexChanged($check)
+    $control.Version.add_SelectedIndexChanged({
+        Invoke-ReleaseCheck -Form $form -Shell $shell -Slug $Slug -Versions $versions
+    })
     $control.Seal.add_Click({
-        $tag = $versions[$control.Version.SelectedIndex].Tag
-        $control.Seal.Enabled = $false
-        $control.Cancel.Enabled = $false
-        $control.Version.Enabled = $false
-        $control.Status.Text = 'Sealing: type the passphrase in the next dialog.'
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-        [System.Windows.Forms.Application]::DoEvents()
-        $result = Invoke-SealCore -BashPath $shell -Arguments @('seal', '--repo', $Slug, '--version', $tag.Substring(1))
-        $form.Cursor = [System.Windows.Forms.Cursors]::Default
-        $parsed = ConvertFrom-SealOutput -Lines $result.Lines
-        if ($result.ExitCode -eq 0 -and $parsed.Sealed) {
+        $sealed = Invoke-ReleaseSeal -Form $form -Shell $shell -Slug $Slug -Versions $versions
+        if ($sealed) {
             $state.Sealed = $true
-            [void] [System.Windows.Forms.MessageBox]::Show("$($parsed.Sealed) is sealed and pushed.", 'Seal', 'OK', 'Information')
+            [void] [System.Windows.Forms.MessageBox]::Show("$sealed is sealed and pushed.", 'Seal', 'OK', 'Information')
             $form.Close()
-            return
         }
-        if (@($parsed.Checks).Count -gt 0) { Show-SealResult -Form $form -Result $parsed }
-        $control.Seal.Enabled = $false
-        $control.Cancel.Enabled = $true
-        $control.Version.Enabled = $true
-        $control.Status.Text = 'Not sealed: ' + ($result.Errors | Select-Object -Last 1)
     })
     # The newest version without a seal comes first; else the newest.
     $state.First = 0

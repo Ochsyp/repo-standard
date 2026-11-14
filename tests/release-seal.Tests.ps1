@@ -154,6 +154,83 @@ exit 3
     }
 }
 
+Describe 'Invoke-ReleaseCheck and Invoke-ReleaseSeal' {
+    BeforeAll {
+        # A stub of release-seal that prints the files beside it: check.out for check, and for
+        # seal seal.out, seal.err on stderr and the exit code in seal.rc.
+        $stubDir = Join-Path -Path $env:TEMP -ChildPath ('release-seal-test-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $stubDir | Out-Null
+        $stub = Join-Path -Path $stubDir -ChildPath 'release-seal'
+        $body = @'
+here=$(dirname "$0")
+case $1 in
+    check) cat "$here/check.out" ;;
+    seal) cat "$here/seal.out"; cat "$here/seal.err" >&2; exit "$(cat "$here/seal.rc")" ;;
+esac
+'@
+        [System.IO.File]::WriteAllText($stub, ($body -replace "`r", '') + "`n")
+        [System.IO.File]::WriteAllText((Join-Path -Path $stubDir -ChildPath 'check.out'), ((Get-GoodLine) -join "`n") + "`n")
+        $bash = Get-SealBash
+        $versions = @([pscustomobject]@{ Tag = 'v1.1.0'; Sealed = $false })
+        $slug = 'example-owner/example'
+
+        # Make the stub's seal print OUT, ERR on stderr, and exit with RC.
+        function Set-SealStub {
+            param([string] $Out, [string] $Err, [int] $Rc)
+            [System.IO.File]::WriteAllText((Join-Path -Path $stubDir -ChildPath 'seal.out'), $Out)
+            [System.IO.File]::WriteAllText((Join-Path -Path $stubDir -ChildPath 'seal.err'), $Err)
+            [System.IO.File]::WriteAllText((Join-Path -Path $stubDir -ChildPath 'seal.rc'), "$Rc`n")
+        }
+    }
+
+    AfterAll {
+        Remove-Item -LiteralPath $stubDir -Recurse -Force
+    }
+
+    BeforeEach {
+        $form = Get-SealForm -Name $slug -Versions $versions
+        $form.Tag.Version.SelectedIndex = 0
+    }
+
+    AfterEach {
+        $form.Dispose()
+    }
+
+    It 'shows a check run in which every check passed, and enables Seal' {
+        Invoke-ReleaseCheck -Form $form -Shell $bash -Slug $slug -Versions $versions -Script $stub
+        $form.Tag.Status.Text | Should -Be 'Every check passed.'
+        $form.Tag.Seal.Enabled | Should -BeTrue
+        $form.Tag.Checks.Items.Count | Should -Be 6
+    }
+
+    It 'turns an error into its status line, with Seal off, and never throws' {
+        # A bash that is not there makes the process start throw inside both functions.
+        $missing = Join-Path -Path $stubDir -ChildPath 'no-such-bash.exe'
+        Invoke-ReleaseCheck -Form $form -Shell $missing -Slug $slug -Versions $versions -Script $stub
+        $form.Tag.Seal.Enabled | Should -BeFalse
+        $form.Tag.Status.Text | Should -BeLike 'The checks cannot run: *'
+        Invoke-ReleaseSeal -Form $form -Shell $missing -Slug $slug -Versions $versions -Script $stub |
+            Should -Be ''
+        $form.Tag.Status.Text | Should -BeLike 'Not sealed: *'
+        $form.Tag.Seal.Enabled | Should -BeFalse
+        $form.Tag.Cancel.Enabled | Should -BeTrue
+    }
+
+    It 'returns the seal it pushed, and on a refusal an empty name, with Cancel and the picker on again' {
+        Set-SealStub -Out "sealed`tseal/v1.1.0`t0123456789abcdef0123456789abcdef01234567`n" -Err '' -Rc 0
+        Invoke-ReleaseSeal -Form $form -Shell $bash -Slug $slug -Versions $versions -Script $stub |
+            Should -Be 'seal/v1.1.0'
+        $form.Tag.Status.Text | Should -Be 'seal/v1.1.0 is sealed and pushed.'
+        Set-SealStub -Out '' -Err "release-seal: the seal could not be signed`n" -Rc 1
+        Invoke-ReleaseSeal -Form $form -Shell $bash -Slug $slug -Versions $versions -Script $stub |
+            Should -Be ''
+        $form.Tag.Status.Text | Should -Be 'Not sealed: release-seal: the seal could not be signed'
+        $form.Tag.Seal.Enabled | Should -BeFalse
+        $form.Tag.Cancel.Enabled | Should -BeTrue
+        $form.Tag.Version.Enabled | Should -BeTrue
+    }
+}
+
 Describe 'PSScriptAnalyzer' {
     It 'reports no warning and no error in release-seal.ps1' {
         $findings = @(Invoke-ScriptAnalyzer -Path $SealScript -Severity Warning, Error)

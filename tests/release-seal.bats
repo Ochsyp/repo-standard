@@ -273,6 +273,10 @@ refute_sealed() {
 }
 
 @test "versions lists the published releases that are not pre-releases, newest first, with their seal" {
+    : | gh_reply api --paginate "repos/$SLUG/releases?per_page=100" --jq "$JQ_TAGS"
+    run_seal versions --repo "$SLUG"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ -z "$output" ]
     printf 'v1.0.0\nv1.2.0\nnightly\nv1.1.0\nv1.1.1\n' |
         gh_reply api --paginate "repos/$SLUG/releases?per_page=100" --jq "$JQ_TAGS"
     run_seal seal --repo "$SLUG" --version 1.1.0
@@ -289,6 +293,16 @@ refute_sealed() {
     run_seal check --repo "$SLUG" --version 1.1.0
     [ "$status" -eq 2 ]
     [[ $stderr == *"a tag moved since the last fetch"* ]]
+}
+
+@test "the config's files may be named from the home, and the allowed signers may have CRLF line ends" {
+    cp "$BATS_FILE_TMPDIR/key" "$SEAL_HOME/key"
+    printf 'maintainer namespaces="git" %s\r\n' "$(cat "$BATS_FILE_TMPDIR/key.pub")" > "$SEAL_HOME/signers"
+    printf 'SIGNING_KEY=key\r\nALLOWED_SIGNERS=signers\r\nGIT_BASE=%s\r\n' "$BATS_TEST_TMPDIR/remote" \
+        > "$SEAL_HOME/config"
+    run_seal seal --repo "$SLUG" --version 1.1.0
+    [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
+    has $'sealed\tseal/v1.1.0\t'
 }
 
 @test "the config needs SIGNING_KEY and ALLOWED_SIGNERS, and knows no other key" {
@@ -318,6 +332,8 @@ refute_sealed() {
     run_seal
     [ "$status" -eq 64 ]
     run_seal check --repo not-a-slug --version 1.1.0
+    [ "$status" -eq 64 ]
+    run_seal check --repo "$OWNER/.." --version 1.1.0
     [ "$status" -eq 64 ]
     run_seal check --repo "$SLUG" --version 1.1
     [ "$status" -eq 64 ]
