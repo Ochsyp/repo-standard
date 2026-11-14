@@ -126,13 +126,16 @@ release_repo() {
     [ "$status" -eq 64 ]
 }
 
-@test "release-prepare rebuilds the MANIFEST with tools/manifest where ROLE=source" {
+@test "release-prepare rebuilds the MANIFEST with tools/manifest where ROLE=source, VERSION staged first" {
     release_repo tar ROLE=source
     mkdir -p "$REPO/tools"
-    printf '#!/bin/sh\necho ran > "%s/manifest-ran"\n' "$BATS_TEST_TMPDIR" > "$REPO/tools/manifest"
+    # tools/manifest reads the index, so it must find the new VERSION there.
+    printf '#!/bin/sh\necho ran > "%s/manifest-ran"\ngit show :VERSION > "%s/manifest-version"\n' \
+        "$BATS_TEST_TMPDIR" "$BATS_TEST_TMPDIR" > "$REPO/tools/manifest"
     commit_all "chore: a manifest tool"
     tool release-prepare 1.0.0
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(cat "$BATS_TEST_TMPDIR/manifest-version")" = 1.0.0 ]
     [ -f "$BATS_TEST_TMPDIR/manifest-ran" ]
 }
 

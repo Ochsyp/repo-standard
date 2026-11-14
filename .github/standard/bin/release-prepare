@@ -93,6 +93,8 @@ done < <(sh "$here/conf" --get VERSION_COPY .github/standard.conf)
 
 if [[ $(sh "$here/conf" --get ROLE .github/standard.conf) == source ]]; then
     [[ -f tools/manifest ]] || die "ROLE=source, but tools/manifest is missing"
+    # tools/manifest reads the index, so the MANIFEST names the new version only once it is staged.
+    git add -- VERSION || die "cannot stage VERSION"
     sh tools/manifest || die "tools/manifest failed"
 fi
 

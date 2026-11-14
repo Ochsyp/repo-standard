@@ -294,7 +294,8 @@ contract_release() {
     flat "$1" > "$flat"
     for job in draft promote verify; do
         want=.github/standard/bin
-        [[ $job != verify ]] || want='.github/standard/bin ci'
+        # release-verify reads the config through conf, which needs the rule packs in .githooks.
+        [[ $job != verify ]] || want='.github/standard/bin .githooks ci'
         got=$(awk -F '\t' -v p="jobs.$job.steps.0.with.sparse-checkout" '$1 == p { print $2 }' "$flat" | paste -s -d ' ' -)
         [[ $got == "$want" ]] ||
             { printf 'release.yml: job %s checks out %s, not the directories %s\n' "$job" "${got:-everything}" "$want" >&2; bad=1; }
@@ -514,7 +515,7 @@ checked_workflows() {
         "$WF/release.yml" > "$FIX/glob.yml"
     run contract_release "$FIX/glob.yml"
     [ "$status" -eq 1 ]
-    [[ $output == *"job verify checks out .github/standard/bin ci/release-verify*"* ]]
+    [[ $output == *"job verify checks out .github/standard/bin .githooks ci/release-verify*"* ]]
     sed '/^  build:$/,/^  build-image:$/ s/contents: read/contents: write/' "$WF/release.yml" > "$FIX/write.yml"
     run contract_release "$FIX/write.yml"
     [ "$status" -eq 1 ]
