@@ -23,10 +23,11 @@ Each version is the GitHub release `vX.Y.Z`.
   Seal only when every check passed, and `tools/release-seal-askpass`, which shows its masked
   passphrase dialog for ssh-keygen. The three files are assets of each release, and
   `ci/test.ps1` runs their Pester tests (phase 3)
-- The check `seal` of `tools/status`: the newest release of a `SEAL=yes` repository warns for 24
-  hours without its seal, then fails; a seal off its release's commit, with another message,
-  unannotated, moved or vanished fails; with `--allowed-signers FILE`, each seal must verify for
-  `maintainer` in the sweep's mirror (phase 3)
+- The check `seal` of `tools/status`: the newest release that the release workflow drafted in a
+  `SEAL=yes` repository warns for 24 hours without its seal, then fails; a seal off its
+  release's commit, with another message, unannotated, moved or vanished fails; with
+  `--allowed-signers FILE`, each seal must verify for `maintainer` in the sweep's mirror
+  (phase 3)
 
 ## [1.0.1] - 2026-11-14
 

@@ -23,11 +23,12 @@
 #             push, by short SHA only
 #   names     no copy or block of the repository names a repository of config/private-names
 #   seal      only where the config on main says SEAL=yes: the newest published release that is
-#             not a pre-release has its seal/vX.Y.Z, else a warn for 24 hours after the publish
-#             and a FAIL from then on; each seal is an annotated tag on the commit of its vX.Y.Z,
-#             with the message "<repo> vX.Y.Z". With --sweep, a seal that moved or vanished since
-#             DIR/<repo>.seals first saw it is a FAIL until its line goes from that file; with
-#             --allowed-signers FILE as well, each seal verifies for maintainer in the mirror.
+#             not a pre-release and that github-actions[bot] drafted has its seal/vX.Y.Z, else a
+#             warn for 24 hours after the publish and a FAIL from then on; each seal is an
+#             annotated tag on the commit of its vX.Y.Z, with the message "<repo> vX.Y.Z". With
+#             --sweep, a seal that moved or vanished since DIR/<repo>.seals first saw it is a
+#             FAIL until its line goes from that file; with --allowed-signers FILE as well, each
+#             seal verifies for maintainer in the mirror.
 # With --clones, for each REPO=CLONE: the hooks are on, privacy.requireDenylist is on, the global
 # includeIf lines exist, and the denylist loader finds sources and terms (counts only). With
 # --sweep DIR, in mirror clones of its own below DIR (from --git-base, by default
