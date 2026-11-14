@@ -1,7 +1,8 @@
 # ci/test.ps1 of repo-standard, after ci/test on Windows: a smoke test of the PowerShell modules
 # that install-tools installs from their pinned packages (PS_MODULES). The pinned Pester runs one
 # passing test, and the pinned PSScriptAnalyzer must find the one rule a smoke script breaks, so
-# both are known to load and to work under Windows PowerShell 5.1.
+# both are known to load and to work under Windows PowerShell 5.1. Then Pester runs
+# tests/release-seal.Tests.ps1, the tests of the seal dialog, which must all pass, none skipped.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -26,3 +27,12 @@ try {
 } finally {
     Remove-Item -LiteralPath $dir -Recurse -Force
 }
+
+$suite = Join-Path -Path $PSScriptRoot -ChildPath '..\tests\release-seal.Tests.ps1'
+$result = Invoke-Pester -Path $suite -PassThru -Output Detailed
+if ($result.FailedCount -ne 0 -or $result.PassedCount -eq 0 -or $result.SkippedCount -ne 0 -or
+    $result.NotRunCount -ne 0 -or $result.InconclusiveCount -ne 0) {
+    throw ('tests/release-seal.Tests.ps1: {0} passed, {1} failed, {2} skipped, {3} not run' -f
+        $result.PassedCount, $result.FailedCount, $result.SkippedCount, $result.NotRunCount)
+}
+Write-Output ('ci/test.ps1: tests/release-seal.Tests.ps1 passed {0} tests' -f $result.PassedCount)

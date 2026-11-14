@@ -1,0 +1,8 @@
+#!/bin/sh
+# release-seal-askpass of repo-standard: the SSH_ASKPASS program of release-seal on Windows,
+# released and installed beside it. ssh-keygen runs it when it needs the seal key's passphrase;
+# it shows the passphrase dialog of release-seal.ps1 and passes what is typed to ssh-keygen on
+# stdout, or exits 1 on Cancel. The prompt it gets, which names the key file, is never shown.
+here=$(dirname -- "$0")
+exec powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+    -File "$(cygpath -w "$here/release-seal.ps1")" -Askpass
