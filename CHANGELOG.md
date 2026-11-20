@@ -29,6 +29,13 @@ Each version is the GitHub release `vX.Y.Z`.
   `--allowed-signers FILE`, each seal must verify for `maintainer` in the sweep's mirror
   (phase 3)
 
+### Changed
+
+- The shared block `CONTRIBUTING.md#standard` gives the order in which a repository goes public:
+  a pull request with `VISIBILITY=public` and the public block texts, the switch on GitHub, a new
+  commit that reruns its checks, then the merge. Its `standard` check fails until the switch, so
+  `main` never goes red
+
 ### Fixed
 
 - repo-standard is public, so its config says `VISIBILITY=public`, which ends the red `ci` on
