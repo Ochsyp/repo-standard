@@ -38,6 +38,12 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ### Fixed
 
+- The rule pack `base` lets GitHub's support address of every Dependabot sign-off through, so a
+  Dependabot pull request, its merge and the history scan no longer fail on it; any other
+  address at github.com still hits. The host-name rule no longer reads a last label that goes on
+  from `lan`, `local`, `internal`, `home.arpa` or `ts.net` with a hyphen and a letter, such as
+  the folder name `x.local-tools-old`, as a host name; real names under those suffixes, also
+  with a hyphen and a digit after them, hit as before
 - repo-standard is public, so its config says `VISIBILITY=public`, which ends the red `ci` on
   `main`, and its own SECURITY.md and CONTRIBUTING.md carry the public variants of the
   reporting, automated-checks and guard-rails blocks. A test in `tests/source-check.bats` holds
