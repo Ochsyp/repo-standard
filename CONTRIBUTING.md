@@ -41,10 +41,9 @@ the checked-out tree with the maintainer's credentials, even during a fetch, so:
 <!-- standard:begin guard-rails -->
 ## Guard rails
 
-This repository is private, and its GitHub plan offers no rulesets: nothing on GitHub blocks a
-direct push to `main` or the merge of a pull request whose checks failed. The hooks and the
-maintainer's review are the guard, and the maintainer's daily check reports any commit on `main`
-that did not come from a merged pull request.
+GitHub's ruleset on `main` blocks force pushes and its deletion. From this repository's
+adoption of the standard on, it also blocks direct pushes, and the merge of a pull request whose
+`all-passed` or `scan` check failed.
 
 The hooks in `.githooks/` guard every commit and push:
 - `pre-commit` refuses a commit while `main` or `master` is checked out, a changed copy of the

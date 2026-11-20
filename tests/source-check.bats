@@ -36,6 +36,22 @@ commit_unchecked() {
     git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "$1"
 }
 
+@test "repo-standard's own documents hold the block variants its VISIBILITY selects" {
+    # No sync writes the source's own blocks, so this test holds them to the config instead.
+    local vis file name body
+    vis=$(sh "$REPO_ROOT/.github/standard/bin/conf" --get VISIBILITY "$REPO_ROOT/.github/standard.conf")
+    for file in SECURITY.md:reporting SECURITY.md:automated-checks CONTRIBUTING.md:guard-rails; do
+        name=${file#*:}
+        file=${file%%:*}
+        body=$(awk -v n="$name" '
+            $0 == "<!-- standard:end " n " -->" { exit }
+            on { print }
+            $0 == "<!-- standard:begin " n " -->" { on = 1 }' "$REPO_ROOT/$file")
+        [ "$body" = "$(cat "$REPO_ROOT/blocks/$file/$name@$vis.md")" ] ||
+            { printf '%s#%s is not the %s variant\n' "$file" "$name" "$vis" >&2; return 1; }
+    done
+}
+
 @test "repo-standard's whole tree passes every rule pack" {
     REPO="$BATS_TEST_TMPDIR/copy"
     git -C "$REPO_ROOT" checkout-index -a --prefix="$REPO/"
