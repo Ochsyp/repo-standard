@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # source-check.bats of repo-standard: what holds only here, where tools/manifest and blocks/
-# exist: standard-check with ROLE=source, and every rule pack over this repository's whole tree.
+# exist: standard-check with ROLE=source, every rule pack over this repository's whole tree, and
+# the order in which the standard block tells a repository to go public.
 # The vendored suites run in every repository of the standard and must not need these paths.
 
 # The sh -c scripts are single-quoted, and bats runs each test in a subshell, both on purpose.
@@ -50,6 +51,15 @@ commit_unchecked() {
         [ "$body" = "$(cat "$REPO_ROOT/blocks/$file/$name@$vis.md")" ] ||
             { printf '%s#%s is not the %s variant\n' "$file" "$name" "$vis" >&2; return 1; }
     done
+}
+
+@test "the standard block gives the order for going public: pull request, switch, commit, merge" {
+    # The pull request that sets VISIBILITY=public fails standard-check until GitHub says public.
+    # Only these tokens are checked, in order, so the wording around them may change.
+    local text
+    text=$(tr '\n' ' ' < "$REPO_ROOT/blocks/CONTRIBUTING.md/standard.md")
+    [[ $text == *'VISIBILITY=public'*'on GitHub'*'settings'*'new commit'*'merges'* ]] ||
+        { echo "blocks/CONTRIBUTING.md/standard.md does not give that order" >&2; return 1; }
 }
 
 @test "repo-standard's whole tree passes every rule pack" {

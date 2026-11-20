@@ -32,9 +32,9 @@ Each version is the GitHub release `vX.Y.Z`.
 ### Changed
 
 - The shared block `CONTRIBUTING.md#standard` gives the order in which a repository goes public:
-  a pull request with `VISIBILITY=public` and the public block texts, the switch on GitHub, a new
-  commit that reruns its checks, then the merge. Its `standard` check fails until the switch, so
-  `main` never goes red
+  a pull request with `VISIBILITY=public` and the public block texts, the switch on GitHub with
+  the security settings those texts promise, a new commit that reruns its checks, then that merge
+  before any other
 
 ### Fixed
 

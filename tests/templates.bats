@@ -88,15 +88,6 @@ block_names() {
     done
 }
 
-@test "the standard block says how a repository goes public: pull request, switch, then merge" {
-    # A pull request that sets VISIBILITY=public fails standard-check until GitHub says public,
-    # so the switch on GitHub must come between opening it and merging it.
-    local text
-    text=$(tr '\n' ' ' < "$REPO_ROOT/blocks/CONTRIBUTING.md/standard.md")
-    [[ $text == *'sets `VISIBILITY=public`'*'switches the repository to public on GitHub'*'new commit'*'merges'* ]] ||
-        { echo "blocks/CONTRIBUTING.md/standard.md does not give that order" >&2; return 1; }
-}
-
 @test "the tests/helpers.bash template sources the standard's lib.bash and parses" {
     grep -q -F '/../.github/standard/tests/lib.bash' "$T/tests/helpers.bash"
     bash -n "$T/tests/helpers.bash"
