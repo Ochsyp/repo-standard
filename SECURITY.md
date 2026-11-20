@@ -1,13 +1,13 @@
 # Security
 
-repo-standard is private, and one maintainer runs it. Its files run in every repository of the
+repo-standard is public, and one maintainer runs it. Its files run in every repository of the
 standard: the hooks on the maintainer's machine, the tools and workflows in GitHub Actions.
 
 <!-- standard:begin reporting -->
 ## Reporting a vulnerability
 
-This repository is private, and GitHub offers private vulnerability reporting only for public
-repositories. Report a problem to the maintainer directly.
+Report a vulnerability through GitHub's private vulnerability reporting: the **Security** tab,
+then **Report a vulnerability**. Do not open a public issue.
 <!-- standard:end reporting -->
 
 ## Trust model
@@ -46,19 +46,19 @@ private repository.
 <!-- standard:begin automated-checks -->
 ## Automated checks
 
-- **Secret scan.** GitHub offers no secret scanning for this private repository, so the
-  `secret-scan` workflow is its only server-side secret scanner. It runs gitleaks (MIT, pinned by
-  version and SHA-256, always with its default rules) and this repository's rule packs over the
-  commits of each pull request and each push to `main`, and over the whole history every Monday
-  and when run by hand. Positive controls run first, so a scanner that finds nothing fails.
-  Findings are redacted.
+- **Secret scan.** The `secret-scan` workflow runs gitleaks (MIT, pinned by version and SHA-256,
+  always with its default rules) and this repository's rule packs over the commits of each pull
+  request and each push to `main`, and over the whole history every Monday and when run by hand.
+  Positive controls run first, so a scanner that finds nothing fails. Findings are redacted.
+  GitHub's secret scanning and push protection are on as well. GitHub turns the Monday run off
+  after 60 days without activity in this repository.
 - **Hooks.** The hooks in `.githooks/` check every commit and push on the maintainer's machine:
   content, path names, messages, ref names and identities, against the rule packs and a denylist
   that never leaves that machine. The maintainer also checks every day what reached GitHub, pull
   request texts and release notes included.
 - **CI and releases.** The `ci` workflow checks the standard's copies, the privacy rules over the
   tree, the version, the changelog and the pull request, and runs the tests. The `release`
-  workflow builds and drafts each release, and verifies it once it is published.
+  workflow builds, attests and drafts each release, and verifies it once it is published.
 - **Dependencies.** Dependabot watches the ecosystems in `.github/dependabot.yml`, with security
   updates on.
 
