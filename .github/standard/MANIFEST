@@ -55,7 +55,7 @@ block   private  5c4a591cf84e7908186af0f81975fa3d41fbd679  -       CONTRIBUTING.
 block   public   3d0736ce601e04ecfd4cc85c346c88268098dac8  -       CONTRIBUTING.md#guard-rails@public
 block   release  e3473b7aaa8398c655bbe357151043d5e8b1619f  -       CONTRIBUTING.md#releasing
 block   seal     99b1ec55fe99b2df0c9d66d419d6f7b7d5346a05  -       CONTRIBUTING.md#releasing@seal
-block   all      9000a6afdde6887d927fe3024772401de73f38e7  -       CONTRIBUTING.md#standard
+block   all      7c1f34d28b2d76bb2b2e8f8fb4e36b9ff3c42402  -       CONTRIBUTING.md#standard
 block   all      581f57a82c5bd79ebadad7fb105c66c207051eb8  -       CONTRIBUTING.md#workflow
 block   private  58a71c9cd2298067184dadfcafad6dc3e9f4cd31  -       SECURITY.md#automated-checks@private
 block   public   9a20dd491d91f7f0b30b8266ad60ecace3393845  -       SECURITY.md#automated-checks@public
