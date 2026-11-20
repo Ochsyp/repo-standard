@@ -144,7 +144,7 @@ synthetic() {
     git -C "$REPO" switch -q -c feat/example
     commit_config PRIVACY_RULES=base
     {
-        printf 'dir x.%s-ai-clone\n' local                    # 1 passes
+        printf 'dir x.%s-tools-old\n' local                   # 1 passes
         printf 'dir y.%s-backup\n' lan                        # 2 passes
         printf 'dir z.%s-tools\n' internal                    # 3 passes
         printf 'dir n.home.%s-old\n' arpa                     # 4 passes
@@ -156,12 +156,14 @@ synthetic() {
         printf 'host h.%s-ai.%s\n' local lan                  # 10 host-name
         printf 'host h.%s- end\n' local                       # 11 host-name
         printf 'host h.%s-ai.%s.%s\n' lan internal lan        # 12 host-name
+        printf 'log h.%s-2026-11-20.log\n' local              # 13 host-name
+        printf 'host h.%s-ai_x\n' local                       # 14 host-name
     } > "$REPO/hosts.txt"
     git -C "$REPO" add hosts.txt
     scan --staged
     [ "$status" -eq 1 ]
-    for hit in 8 9 10 11 12; do [[ $stderr == *"hosts.txt:$hit: host-name"* ]]; done
-    [ "$(grep -c '^privacy-scan: .*: [a-z0-9-]*$' <<< "$stderr")" -eq 5 ]
+    for hit in 8 9 10 11 12 13 14; do [[ $stderr == *"hosts.txt:$hit: host-name"* ]]; done
+    [ "$(grep -c '^privacy-scan: .*: [a-z0-9-]*$' <<< "$stderr")" -eq 7 ]
 }
 
 @test "the Dependabot sign-off passes, and another github.com address still hits" {
@@ -178,6 +180,9 @@ synthetic() {
     stage notes.txt 'synthetic notes'
     git -C "$REPO" -c core.hooksPath=no-hooks commit -q -F "$BATS_TEST_TMPDIR/msg"
     scan --range HEAD --not --remotes=origin
+    [ "$status" -eq 0 ]
+    [[ $stderr != *e-mail* ]]
+    scan --history
     [ "$status" -eq 0 ]
     [[ $stderr != *e-mail* ]]
     printf 'docs: notes\n\nfrom <%s@%s.%s>\n' someone github com > "$BATS_TEST_TMPDIR/msg"
