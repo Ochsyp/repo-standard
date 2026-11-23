@@ -22,6 +22,8 @@
 # new .github/dependabot.yml gets the github-actions entry at limit 0. Last, it prints the pull
 # request text: the changed files and blocks, the MANIFEST's blob id and the CHANGELOG line.
 # --summary replaces the line's default summary. Paths of this machine are never printed.
+# After that text, --init prints on stderr what the adoption must still fix by hand. The notes
+# give line numbers and blob ids and never quote the repository's own text.
 # Exit 0; 1 refused; 2 a step that cannot run; 64 usage.
 if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 set -euo pipefail
@@ -167,6 +169,11 @@ fi
 changed_files=()
 changed_blocks=()
 removed=()
+# For the notes of --init: blocks added at the end of an existing document, as "file TAB name TAB
+# title", and the blocks of configuration files that existed, as "file TAB name".
+appended=()
+config_blocks=()
+notes=()
 
 # Write the copy at $3 from the blob $1 with the mode $2, and stage it with that mode.
 copy() {
@@ -220,8 +227,10 @@ while read -r type profile oid _ path; do
     fi
     begins=$(tr -d '\r' < "$file" | grep -c -x -F -e "$begin" || true)
     ends=$(tr -d '\r' < "$file" | grep -c -x -F -e "$end" || true)
+    added=0
     if [[ $begins == 0 && $ends == 0 ]]; then
         (( init )) || refuse "$target: the markers of the block $name are missing"
+        added=1
         case $target in
             *.md) printf '\n%s\n%s\n' "$begin" "$end" >> "$file" ;;
             *) { printf '%s\n%s\n' "$begin" "$end"; cat "$file"; } > "$tmp/head" && cp "$tmp/head" "$file" ;;
@@ -230,6 +239,17 @@ while read -r type profile oid _ path; do
         refuse "$target: the block $name needs one begin and one end marker"
     fi
     git -C "$src" cat-file blob "$oid" > "$tmp/body" || fail "cannot read the block $path"
+    if (( init && ! created )); then
+        case $target in
+            *.md)
+                if (( added )); then
+                    title=$(sed -n '1s/^#*[[:space:]]*//p' "$tmp/body" | tr -d '\r')
+                    appended+=("$target"$'\t'"$name"$'\t'"$title")
+                fi
+                ;;
+            *) config_blocks+=("$target"$'\t'"$name") ;;
+        esac
+    fi
     BEGIN_LINE=$begin END_LINE=$end BODY=$tmp/body awk '
         { line = $0; sub(/\r$/, "", line) }
         line == ENVIRON["BEGIN_LINE"] {
@@ -276,6 +296,141 @@ git -C "$dir" add -- .github/standard/MANIFEST || fail "cannot stage the MANIFES
 [[ $(git -C "$dir" rev-parse :.github/standard/MANIFEST) == "$asset" ]] ||
     refuse "the target stages another MANIFEST than the release's asset"
 
+# 5. Under --init, what the adoption must still fix by hand.
+note() { notes+=("$*"); }
+
+# Turn line numbers on stdin into "line N" or "lines N, M"; nothing for no input.
+at_lines() {
+    awk '{ out = out (NR > 1 ? ", " : "") $0 } END { if (NR) print (NR > 1 ? "lines " : "line ") out }'
+}
+
+# Print the numbers of the lines of file $1 outside block $2 that repeat the block. In YAML a
+# top-level key counts. In .editorconfig only root and section headers do, because a setting may
+# rightly recur under another section. Elsewhere any line that is not a comment counts.
+repeated_lines() {
+    tr -d '\r' < "$1" > "$tmp/config"
+    BASE=${1##*/} NAME=$2 awk '
+        function key(s) {
+            if (ENVIRON["BASE"] == "dependabot.yml")
+                return s ~ /^[A-Za-z_-]+:/ ? substr(s, 1, index(s, ":")) : ""
+            gsub(/^[ \t]+|[ \t]+$/, "", s)
+            if (s == "" || s ~ /^[#;]/) return ""
+            if (ENVIRON["BASE"] == ".editorconfig") {
+                if (tolower(s) ~ /^root[ \t]*=/) return "root"
+                return s ~ /^\[.*\]$/ ? s : ""
+            }
+            gsub(/[ \t]+/, " ", s)
+            return s
+        }
+        BEGIN { b = "# standard:begin " ENVIRON["NAME"]; e = "# standard:end " ENVIRON["NAME"] }
+        $0 == b { inside = 1; next }
+        $0 == e { inside = 0; next }
+        FNR == NR { if (inside && (k = key($0)) != "") want[k] = 1; next }
+        !inside && (key($0) in want) { print FNR }' "$tmp/config" "$tmp/config"
+}
+
+# Print the numbers of the headings of Markdown file $1, outside blocks and code fences, that
+# equal the title $2 or are a whole-word start of it.
+old_sections() {
+    TITLE=$2 awk '
+        BEGIN { t = tolower(ENVIRON["TITLE"]) }
+        { sub(/\r$/, "") }
+        /^<!-- standard:begin / { inside = 1; next }
+        /^<!-- standard:end / { inside = 0; next }
+        inside { next }
+        /^(```|~~~)/ { fence = !fence; next }
+        fence || !/^#+[ \t]/ { next }
+        {
+            h = $0
+            sub(/^#+[ \t]+/, "", h)
+            sub(/[ \t#]+$/, "", h)
+            h = tolower(h)
+            if (h != "" && (h == t || index(t, h " ") == 1)) print FNR
+        }' "$1"
+}
+
+# standard-check's rule 6 reads the entry the same way: the limit of github-actions for /.
+actions_limit() {
+    tr -d '\r' < "$1" | awk '
+        function value(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+#.*$/, "", s); gsub(/["\047]/, "", s); return s }
+        function flush() { if (eco == "github-actions" && dir == "/") { found = 1; out = (lim == "") ? "none" : lim } }
+        /^[ \t]*-[ \t]+package-ecosystem:/ { flush(); eco = value($0); dir = ""; lim = ""; next }
+        /^[ \t]+directory:/ { dir = value($0) }
+        /^[ \t]+open-pull-requests-limit:/ { lim = value($0) }
+        END { flush(); print found ? out : "absent" }'
+}
+
+if (( init )); then
+    for entry in "${config_blocks[@]}"; do
+        IFS=$'\t' read -r target name <<< "$entry"
+        at=$(repeated_lines "$dir/$target" "$name" | at_lines)
+        if [[ -n $at ]]; then
+            if [[ $at == lines* ]]; then verb=repeat; else verb=repeats; fi
+            case $target in
+                .github/dependabot.yml)
+                    note "$target: $at $verb the block's version or updates." \
+                        "Delete them, so that your entries follow the block's updates." ;;
+                .editorconfig)
+                    note "$target: $at $verb the block's root or a section header." \
+                        "Delete a repeated root, and a repeated section with its settings," \
+                        "unless they override the block on purpose." ;;
+                *) note "$target: $at $verb the block. Delete them." ;;
+            esac
+        fi
+        if [[ $target == .github/dependabot.yml ]]; then
+            case $(actions_limit "$dir/$target") in
+                0) ;;
+                absent)
+                    note "$target: add a github-actions entry for / with open-pull-requests-limit: 0." \
+                        "standard-check refuses the file without it." ;;
+                *)
+                    note "$target: set open-pull-requests-limit: 0 on the github-actions entry for /." \
+                        "standard-check refuses the file without it." ;;
+            esac
+        fi
+    done
+    for entry in "${appended[@]}"; do
+        IFS=$'\t' read -r target name title <<< "$entry"
+        at=$(old_sections "$dir/$target" "$title" | at_lines)
+        case $at in
+            '') what="delete any old section it replaces" ;;
+            lines*) what="delete the old sections at $at" ;;
+            *) what="delete the old section at $at" ;;
+        esac
+        note "$target: the block $name is at the end." \
+            "Move its markers to where templates/$target has them, and $what."
+    done
+    if ! grep -q -i -E '^##[[:space:]]+Checks[[:space:]]*$' "$dir/CONTRIBUTING.md"; then
+        note "CONTRIBUTING.md: add a ## Checks section. Step 4 of the workflow block points to it."
+    fi
+    if [[ ! -f $dir/CHANGELOG.md ]]; then
+        note "CHANGELOG.md: write it from templates/CHANGELOG.md, then add under ### Changed: $line"
+    elif ! grep -q -F -e "$line" "$dir/CHANGELOG.md"; then
+        note "CHANGELOG.md: add under ### Changed: $line"
+    fi
+    # As in the size guard: every tracked blob but a submodule, named by id, since a path may
+    # hold a private term.
+    limit=$(conf MAX_BLOB_KB)
+    if git -C "$dir" ls-files -s | awk '$1 != "160000" && $3 == 0 { print $2 }' | LC_ALL=C sort -u |
+        git -C "$dir" cat-file --batch-check='%(objectname) %(objectsize)' > "$tmp/sizes"; then
+        big=0
+        while read -r short kb; do
+            big=1
+            note "blob $short is $kb KB, above MAX_BLOB_KB=$limit." \
+                "A commit that edits its file and leaves it this large is refused." \
+                "Find its file with: git ls-files -s | grep $short"
+        done < <(awk -v limit="$limit" '$2 != "missing" && $2 > limit * 1024 {
+            print substr($1, 1, 12), int(($2 + 1023) / 1024) }' "$tmp/sizes")
+        if (( big )); then
+            note "Raise MAX_BLOB_KB in .github/standard.conf first, in a commit of its own:" \
+                "the hooks read the limit from HEAD. Once the config is on main, that commit needs" \
+                "its own chore/privacy-* pull request."
+        fi
+    else
+        note "the sizes of the tracked files could not be read, so MAX_BLOB_KB was not compared."
+    fi
+fi
+
 # The pull request text, checked for the names too.
 list() {
     printf '%s:\n' "$1"
@@ -309,3 +464,6 @@ if names_one "$tmp/text"; then
     refuse "the pull request text names a private repository (config/private-names)"
 fi
 cat "$tmp/text"
+for entry in "${notes[@]}"; do
+    say "note: $entry"
+done

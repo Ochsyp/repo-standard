@@ -9,7 +9,8 @@
 #             own (rule 10). Reads EVENT, PRIVATE, BASE, HEAD_REF, HEAD_REPO and REPO.
 #   --staged  checks the index; the pre-commit hook runs it where the standard is adopted.
 #   --local   as --staged, plus whether the hooks are on, what the denylist loader finds (counts
-#             only), and remotes of another owner, as in a fork clone.
+#             only), remotes of another owner, as in a fork clone, and a notice for each tracked
+#             blob above the MAX_BLOB_KB of HEAD, which is the limit the hooks apply.
 # Exit 0; 1 when a rule fails; 2 when a check cannot run; 64 usage.
 set -eu
 
@@ -517,6 +518,30 @@ if [ "$mode" = --local ]; then
                 (!("origin" in repo) || owner[r] != owner["origin"]))
                 printf "standard-check: warning: remote %s is %s of another owner than origin. In a fork clone, never check out a fork branch with the hooks on (CONTRIBUTING.md, Workflow).\n", r, repo[r] > "/dev/stderr"
         }' "$t/remotes"
+    # A notice only, so a repository with a large file stays green. Blobs are named by id, since a
+    # path may hold a term. Without a readable config in HEAD, the hooks use 1024.
+    limit=1024
+    if [ "$prev_state" = ok ]; then
+        limit=$(sed -n 's/^MAX_BLOB_KB=//p' "$t/prev.out")
+    fi
+    awk -F '\t' '{ split($1, m, " "); if (m[1] != "160000") print m[2] }' "$t/tree" |
+        LC_ALL=C sort -u > "$t/blobs"
+    if git cat-file --batch-check='%(objectname) %(objectsize)' < "$t/blobs" > "$t/sizes"; then
+        awk -v limit="$limit" '$2 != "missing" && $2 > limit * 1024 {
+            print substr($1, 1, 12), int(($2 + 1023) / 1024) }' "$t/sizes" > "$t/big"
+        while read -r short kb; do
+            notice "blob $short is $kb KB, above MAX_BLOB_KB=$limit." \
+                "A commit that edits its file and leaves it this large is refused." \
+                "Find its file with: git ls-files -s | grep $short"
+        done < "$t/big"
+        if [ -s "$t/big" ]; then
+            notice "Raise MAX_BLOB_KB in .github/standard.conf first, in a commit of its own:" \
+                "the hooks read the limit from HEAD. Once the config is on main, that commit needs" \
+                "its own chore/privacy-* pull request."
+        fi
+    else
+        notice "the sizes of the tracked files could not be read, so MAX_BLOB_KB was not compared"
+    fi
 fi
 
 finish

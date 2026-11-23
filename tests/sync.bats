@@ -330,3 +330,137 @@ block_of() {
         sh "$TGT" "$ZERO"
     [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
 }
+
+# Commit everything in the target with the hooks off.
+commit_target() {
+    git -C "$TGT" add -A
+    git -C "$TGT" -c core.hooksPath=no-hooks commit -q -m "$1"
+}
+
+# The numbers of the lines of file $1 outside its standard blocks that equal one of the other
+# arguments, as "line N" or "lines N, M".
+own_lines() {
+    local file=$1 found
+    shift
+    found=$(printf '%s\n' "$@" | awk '
+        FNR == NR { want[$0] = 1; next }
+        /standard:begin / { inside = 1; next }
+        /standard:end / { inside = 0; next }
+        !inside && ($0 in want) { out = out (out == "" ? "" : ", ") FNR; n++ }
+        END { print (n > 1 ? "lines " : "line ") out }' - "$file")
+    printf '%s' "$found"
+}
+
+@test "sync --init names the lines that repeat a configuration block, and leaves them" {
+    local at
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    printf '%s\n' 'version: 2' 'updates:' '  - package-ecosystem: npm' '    directory: /' \
+        '    schedule:' '      interval: weekly' > "$TGT/.github/dependabot.yml"
+    printf '%s\n' 'root = true' '' '[*]' 'indent_size = 4' '' '[*.example]' 'indent_size = 4' \
+        > "$TGT/.editorconfig"
+    printf '%s\n' '* text=auto eol=lf' '*.example binary' > "$TGT/.gitattributes"
+    commit_target "chore: our own configuration"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    at=$(own_lines "$TGT/.github/dependabot.yml" 'version: 2' 'updates:')
+    [[ $at == "lines "* ]]
+    [[ $stderr == *"sync: note: .github/dependabot.yml: $at repeat the block's version or updates."* ]]
+    # A setting under another section is no repeat; only root and the section header are.
+    at=$(own_lines "$TGT/.editorconfig" 'root = true' '[*]')
+    [[ $stderr == *"sync: note: .editorconfig: $at repeat the block's root or a section header."* ]]
+    at=$(own_lines "$TGT/.gitattributes" '* text=auto eol=lf')
+    [[ $stderr == *"sync: note: .gitattributes: $at repeats the block."* ]]
+    grep -q -x -F 'indent_size = 4' "$TGT/.editorconfig"
+    [[ $output != *"note:"* ]]
+}
+
+@test "sync --init says what an existing dependabot.yml lacks for its github-actions entry" {
+    local entry='  - package-ecosystem: github-actions'
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    printf '%s\n' 'version: 2' 'updates:' "$entry" '    directory: /' '    schedule:' \
+        '      interval: weekly' > "$TGT/.github/dependabot.yml"
+    commit_target "chore: an entry without the limit"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: .github/dependabot.yml: set open-pull-requests-limit: 0 on the github-actions entry for /"* ]]
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    printf '%s\n' 'version: 2' 'updates:' '  - package-ecosystem: npm' '    directory: /' \
+        > "$TGT/.github/dependabot.yml"
+    commit_target "chore: no actions entry"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: .github/dependabot.yml: add a github-actions entry for / with open-pull-requests-limit: 0"* ]]
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    printf '%s\n' 'version: 2' 'updates:' "$entry" '    directory: /' '    schedule:' \
+        '      interval: weekly' '    open-pull-requests-limit: 0' > "$TGT/.github/dependabot.yml"
+    commit_target "chore: an entry at limit 0"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr != *"github-actions entry"* ]]
+}
+
+@test "sync --init says which appended Markdown blocks to move and which old sections to delete" {
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    printf '%s\n' '# Contributing' '' '## Workflow' '' 'Our old steps.' '' '## Guard rails' '' \
+        'Our old rails.' '' '```' '## Workflow' '```' > "$TGT/CONTRIBUTING.md"
+    printf '%s\n' '# Security' '' '## Reporting' '' 'Our old address.' > "$TGT/SECURITY.md"
+    commit_target "docs: our own documents"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: CONTRIBUTING.md: the block workflow is at the end. Move its markers to where templates/CONTRIBUTING.md has them, and delete the old section at line 3."* ]]
+    [[ $stderr == *"sync: note: CONTRIBUTING.md: the block guard-rails is at the end. Move its markers to where templates/CONTRIBUTING.md has them, and delete the old section at line 7."* ]]
+    # "Reporting" is a whole-word start of the block's "Reporting a vulnerability".
+    [[ $stderr == *"sync: note: SECURITY.md: the block reporting is at the end. Move its markers to where templates/SECURITY.md has them, and delete the old section at line 3."* ]]
+    [[ $stderr == *"sync: note: CONTRIBUTING.md: the block standard is at the end. Move its markers to where templates/CONTRIBUTING.md has them, and delete any old section it replaces."* ]]
+    [[ $stderr == *"sync: note: CONTRIBUTING.md: add a ## Checks section. Step 4 of the workflow block points to it."* ]]
+    # The notes never repeat the repository's own words.
+    [[ $stderr != *"Our old"* && $output != *"note:"* ]]
+}
+
+@test "sync --init into a fresh repository notes only the CHANGELOG line; a later sync notes nothing" {
+    local line='- Repository standard 1.0.0: adopted, with the hooks, checks, workflows and blocks.'
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: CHANGELOG.md: write it from templates/CHANGELOG.md, then add under ### Changed: $line"* ]]
+    [ "$(grep -c 'sync: note:' <<< "$stderr")" -eq 1 ]
+    sed 's#OWNER/REPO#example-owner/example#' "$SRC/templates/CHANGELOG.md" > "$TGT/CHANGELOG.md"
+    commit_target "chore: adopt"
+    run_sync --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr != *"note:"* ]]
+    # An existing CHANGELOG without the line gets it named; one that holds it needs no note.
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    sed 's#OWNER/REPO#example-owner/example#' "$SRC/templates/CHANGELOG.md" > "$TGT/CHANGELOG.md"
+    commit_target "docs: our changelog"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: CHANGELOG.md: add under ### Changed: $line"* ]]
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    printf '%s\n' '# Changelog' '' '## [Unreleased]' '' '### Changed' '' "$line" > "$TGT/CHANGELOG.md"
+    commit_target "docs: our changelog with the line"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr != *"note: CHANGELOG.md"* ]]
+}
+
+@test "sync --init names a tracked blob above MAX_BLOB_KB by id, never by path" {
+    local short
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar MAX_BLOB_KB=1
+    head -c 2048 /dev/zero | tr '\0' a > "$TGT/large-name.dat"
+    commit_target "feat: a large file"
+    short=$(git -C "$TGT" rev-parse --short=12 HEAD:large-name.dat)
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: blob $short is 2 KB, above MAX_BLOB_KB=1."* ]]
+    [[ $stderr == *"Find its file with: git ls-files -s | grep $short"* ]]
+    [[ $stderr == *"in a commit of its own"* && $stderr == *"chore/privacy-*"* ]]
+    [[ $stderr != *large-name* && $output != *"$short"* ]]
+    # Exactly at the limit is not above it, as in the size guard.
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar MAX_BLOB_KB=2
+    head -c 2048 /dev/zero | tr '\0' a > "$TGT/large-name.dat"
+    commit_target "feat: a file at the limit"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr != *"blob $short"* ]]
+}
