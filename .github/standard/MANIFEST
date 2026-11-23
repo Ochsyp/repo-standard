@@ -10,7 +10,7 @@ file    all      0df849eb5cbe375990b0e03f9d044e21462752b2  100755  .githooks/pri
 file    all      634b21bf283663f036a7e94b4cbac579bc5f316d  100644  .githooks/rules/base
 file    all      40ca1345fcae4b716888942e08db42edf18e5d1b  100644  .githooks/rules/disk
 file    all      a34753f7f764dd463fe795f388a243da0b1fcf91  100644  .githooks/rules/vm
-file    all      62d16e7fb242558ee36d667d982327636c7dd6cb  100644  .github/pull_request_template.md
+file    all      1fd68eab7ce3eeb367ffab3722137032ca82bdd3  100644  .github/pull_request_template.md
 file    all      59dd7e555b62927bd3c97693de357aebc6188e2a  100644  .github/standard/README.md
 file    all      a6a035238c79fb86b568688177b7093f91715dfd  100644  .github/standard/actions.allow
 file    all      c11cccce8c02c866d3cb77bd698a0204da1cf96b  100755  .github/standard/bin/changelog-entry
@@ -23,7 +23,7 @@ file    all      7b2b55a74c0b26df52dace15aecdec7874f57501  100755  .github/stand
 file    all      b67686feca114254debdf422fbbd4f16c2724889  100755  .github/standard/bin/release-build
 file    all      54aacf1df7bf820872c0febc158ce18dce5516e2  100755  .github/standard/bin/release-draft
 file    all      644e8222406b5ad087d05655ff9290f042b051e8  100755  .github/standard/bin/release-meta
-file    all      4c7e4c4f98f2849719493c9f202d6fdf03fb8cba  100755  .github/standard/bin/release-prepare
+file    all      87427c779d96c11f3b4bac0191546c6ef0dc7164  100755  .github/standard/bin/release-prepare
 file    all      3d504d7817870445c8ec917dfb0f6e102d2b764e  100755  .github/standard/bin/release-promote
 file    all      ca6920304c4e2abd8491d5cda634358407433b5d  100755  .github/standard/bin/release-verify
 file    all      c51eace2dce1e43778a3d64fd6217d29fc369d9f  100755  .github/standard/bin/run-stage

@@ -97,6 +97,17 @@ block_names() {
     done
 }
 
+@test "the checklist line on skipped tests is the same in the template and both tools that print it" {
+    local first second file
+    first=$(grep -F -e 'no test was skipped' "$REPO_ROOT/.github/pull_request_template.md")
+    second=$(grep -A 1 -F -e 'no test was skipped' "$REPO_ROOT/.github/pull_request_template.md" | tail -n 1)
+    [[ $second == *'any other test stage'* ]]
+    for file in tools/sync .github/standard/bin/release-prepare; do
+        grep -q -F -e "$first" "$REPO_ROOT/$file" && grep -q -F -e "$second" "$REPO_ROOT/$file" ||
+            { printf '%s does not hold the checklist line\n' "$file" >&2; return 1; }
+    done
+}
+
 @test "the tests/helpers.bash template sources the standard's lib.bash and parses" {
     grep -q -F '/../.github/standard/tests/lib.bash' "$T/tests/helpers.bash"
     bash -n "$T/tests/helpers.bash"
