@@ -527,14 +527,23 @@ if [ "$mode" = --local ]; then
     awk -F '\t' '{ split($1, m, " "); if (m[1] != "160000") print m[2] }' "$t/tree" |
         LC_ALL=C sort -u > "$t/blobs"
     if git cat-file --batch-check='%(objectname) %(objectsize)' < "$t/blobs" > "$t/sizes"; then
-        awk -v limit="$limit" '$2 != "missing" && $2 > limit * 1024 {
-            print substr($1, 1, 12), int(($2 + 1023) / 1024) }' "$t/sizes" > "$t/big"
+        awk -v limit="$limit" '
+            $2 == "missing" { print substr($1, 1, 12), "missing"; next }
+            $2 > limit * 1024 { print substr($1, 1, 12), int(($2 + 1023) / 1024) }' "$t/sizes" \
+            > "$t/big"
+        big=0
         while read -r short kb; do
+            if [ "$kb" = missing ]; then
+                notice "blob $short could not be read, so its size was not compared." \
+                    "Find its file with: git ls-files -s | grep $short"
+                continue
+            fi
+            big=1
             notice "blob $short is $kb KB, above MAX_BLOB_KB=$limit." \
                 "A commit that edits its file and leaves it this large is refused." \
                 "Find its file with: git ls-files -s | grep $short"
         done < "$t/big"
-        if [ -s "$t/big" ]; then
+        if [ "$big" -eq 1 ]; then
             notice "Raise MAX_BLOB_KB in .github/standard.conf first, in a commit of its own:" \
                 "the hooks read the limit from HEAD. Once the config is on main, that commit needs" \
                 "its own chore/privacy-* pull request."

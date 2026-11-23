@@ -435,6 +435,18 @@ make_consumer() {
     [[ $stderr != *"above MAX_BLOB_KB"* ]]
 }
 
+@test "--local says when it cannot read a tracked blob's size, and the exit stays" {
+    local oid
+    oid=$(printf '%040d' 0 | tr 0 1)
+    make_consumer
+    write_denylist
+    git -C "$REPO" update-index --add --cacheinfo "100644,$oid,ghost-name.dat"
+    check --local
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"notice: blob ${oid:0:12} could not be read, so its size was not compared. Find its file with: git ls-files -s | grep ${oid:0:12}"* ]]
+    [[ $stderr != *ghost-name* && $stderr != *"Raise MAX_BLOB_KB"* ]]
+}
+
 @test "a staged ROLE=source does not switch off the copy checks" {
     make_consumer
     write_config VISIBILITY=public PRIVACY_RULES=base ROLE=source

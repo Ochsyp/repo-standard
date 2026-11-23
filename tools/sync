@@ -338,8 +338,13 @@ old_sections() {
         /^<!-- standard:begin / { inside = 1; next }
         /^<!-- standard:end / { inside = 0; next }
         inside { next }
-        /^(```|~~~)/ { fence = !fence; next }
-        fence || !/^#+[ \t]/ { next }
+        /^(```|~~~)/ {
+            mark = substr($0, 1, 3)
+            if (fence == "") fence = mark
+            else if (fence == mark) fence = ""
+            next
+        }
+        fence != "" || !/^#+[ \t]/ { next }
         {
             h = $0
             sub(/^#+[ \t]+/, "", h)
@@ -361,20 +366,26 @@ actions_limit() {
 }
 
 if (( init )); then
+    numbered=0
     for entry in "${config_blocks[@]}"; do
         IFS=$'\t' read -r target name <<< "$entry"
         at=$(repeated_lines "$dir/$target" "$name" | at_lines)
         if [[ -n $at ]]; then
+            numbered=1
             if [[ $at == lines* ]]; then verb=repeat; else verb=repeats; fi
             case $target in
                 .github/dependabot.yml)
                     note "$target: $at $verb the block's version or updates." \
-                        "Delete them, so that your entries follow the block's updates." ;;
+                        "Delete the repeated version and updates. Then put your entries directly" \
+                        "below the block's end marker, and any other top-level key such as" \
+                        "registries after them." ;;
                 .editorconfig)
                     note "$target: $at $verb the block's root or a section header." \
                         "Delete a repeated root, and a repeated section with its settings," \
                         "unless they override the block on purpose." ;;
-                *) note "$target: $at $verb the block. Delete them." ;;
+                *)
+                    note "$target: $at $verb the block. The last matching line wins, so check" \
+                        "whether a line of yours relies on the repeat before you delete it." ;;
             esac
         fi
         if [[ $target == .github/dependabot.yml ]]; then
@@ -393,14 +404,17 @@ if (( init )); then
         IFS=$'\t' read -r target name title <<< "$entry"
         at=$(old_sections "$dir/$target" "$title" | at_lines)
         case $at in
-            '') what="delete any old section it replaces" ;;
-            lines*) what="delete the old sections at $at" ;;
-            *) what="delete the old section at $at" ;;
+            '') what="Delete any old section it replaces" ;;
+            lines*) what="Delete the old sections at $at"; numbered=1 ;;
+            *) what="Delete the old section at $at"; numbered=1 ;;
         esac
-        note "$target: the block $name is at the end." \
-            "Move its markers to where templates/$target has them, and $what."
+        note "$target: the block $name is at the end. $what," \
+            "then move the block with its markers to the place templates/$target shows for it."
     done
-    if ! grep -q -i -E '^##[[:space:]]+Checks[[:space:]]*$' "$dir/CONTRIBUTING.md"; then
+    if (( numbered )); then
+        notes=("Line numbers hold for the files as sync left them. In each file, delete from the last line up, then move what the notes say to move." "${notes[@]}")
+    fi
+    if [[ -z $(old_sections "$dir/CONTRIBUTING.md" Checks) ]]; then
         note "CONTRIBUTING.md: add a ## Checks section. Step 4 of the workflow block points to it."
     fi
     if [[ ! -f $dir/CHANGELOG.md ]]; then
@@ -409,18 +423,29 @@ if (( init )); then
         note "CHANGELOG.md: add under ### Changed: $line"
     fi
     # As in the size guard: every tracked blob but a submodule, named by id, since a path may
-    # hold a private term.
-    limit=$(conf MAX_BLOB_KB)
+    # hold a private term. The limit is the hooks': HEAD's, or 1024 when HEAD has none that parses.
+    limit=1024
+    if git -C "$dir" cat-file -e HEAD:.github/standard.conf 2> /dev/null; then
+        git -C "$dir" cat-file blob HEAD:.github/standard.conf > "$tmp/head.conf" &&
+            limit=$(sh "$src/.github/standard/bin/conf" --get MAX_BLOB_KB "$tmp/head.conf" 2> /dev/null) ||
+            limit=1024
+    fi
     if git -C "$dir" ls-files -s | awk '$1 != "160000" && $3 == 0 { print $2 }' | LC_ALL=C sort -u |
         git -C "$dir" cat-file --batch-check='%(objectname) %(objectsize)' > "$tmp/sizes"; then
         big=0
         while read -r short kb; do
+            if [[ $kb == missing ]]; then
+                note "blob $short could not be read, so its size was not compared." \
+                    "Find its file with: git ls-files -s | grep $short"
+                continue
+            fi
             big=1
             note "blob $short is $kb KB, above MAX_BLOB_KB=$limit." \
                 "A commit that edits its file and leaves it this large is refused." \
                 "Find its file with: git ls-files -s | grep $short"
-        done < <(awk -v limit="$limit" '$2 != "missing" && $2 > limit * 1024 {
-            print substr($1, 1, 12), int(($2 + 1023) / 1024) }' "$tmp/sizes")
+        done < <(awk -v limit="$limit" '
+            $2 == "missing" { print substr($1, 1, 12), "missing"; next }
+            $2 > limit * 1024 { print substr($1, 1, 12), int(($2 + 1023) / 1024) }' "$tmp/sizes")
         if (( big )); then
             note "Raise MAX_BLOB_KB in .github/standard.conf first, in a commit of its own:" \
                 "the hooks read the limit from HEAD. Once the config is on main, that commit needs" \
