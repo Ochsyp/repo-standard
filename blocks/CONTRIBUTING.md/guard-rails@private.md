@@ -11,9 +11,10 @@ The hooks in `.githooks/` guard every commit and push:
   committer that hold a denylist term or a rule pack hit. `pre-merge-commit` does the same for a
   merge.
 - `commit-msg` refuses such a term or hit in the message.
-- `pre-push` refuses a push to `main` or `master`, every tag push (release tags come from
-  publishing a release), a branch or tag name with a term or hit, and what the pushed commits
-  bring in, which covers rebase, cherry-pick and `am` too.
+- `pre-push` refuses a push to `main` or `master`, every tag push except a `v*` tag under
+  `RELEASE_KIND=legacy` (otherwise release tags come from publishing a release), a branch or tag
+  name with a term or hit, and what the pushed commits bring in, which covers rebase, cherry-pick
+  and `am` too.
 
 The denylists hold names that must never be committed and never leave the maintainer's machine.
 The rule packs in `.githooks/rules/` hold the patterns: private addresses, local host names, MAC

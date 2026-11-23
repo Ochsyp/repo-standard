@@ -329,7 +329,7 @@ else
 fi
 for stage in $stages; do
     if [ -z "$(oid_of "ci/$stage")" ] && [ -z "$(oid_of "ci/$stage.ps1")" ]; then
-        problem "ci/$stage: missing (CI_STAGES lists $stage)"
+        problem "ci/$stage or ci/$stage.ps1: missing (CI_STAGES lists $stage)"
     fi
 done
 ho=$(oid_of tests/helpers.bash)

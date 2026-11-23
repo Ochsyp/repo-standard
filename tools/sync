@@ -375,8 +375,9 @@ if (( init )); then
     fi
     if [[ -e $dir/.github/dependabot.yaml ]]; then
         note ".github/dependabot.yaml stands beside .github/dependabot.yml, the file the standard" \
-            "checks. Move your entries into it, leaving out any github-actions entry for /, and" \
-            "put other top-level keys such as registries after them. Then delete the .yaml file."
+            "checks. Move your entries into it, leaving out any github-actions entry for / and any" \
+            "entry for a package-ecosystem, directory and target-branch it already covers, and put" \
+            "other top-level keys such as registries after them. Then delete the .yaml file."
     fi
     # Which older section a block replaces is the reader's call: a heading alone cannot show it.
     for entry in "${appended[@]}"; do
@@ -386,7 +387,7 @@ if (( init )); then
             "the block goes."
     done
     if ! grep -q -i -E '^#{1,6}[[:space:]]+Checks[[:space:]]*$' "$dir/CONTRIBUTING.md"; then
-        note "CONTRIBUTING.md: add a ## Checks section. Step 4 of the workflow block points to it."
+        note "CONTRIBUTING.md: add a ## Checks section. The workflow block points to it."
     fi
     if [[ ! -f $dir/CHANGELOG.md ]]; then
         note "CHANGELOG.md: write it from templates/CHANGELOG.md, then add under ### Changed: $line"

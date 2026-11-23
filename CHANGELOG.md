@@ -49,6 +49,12 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ### Fixed
 
+- The words the first adoption found wrong or missing. The guard-rails blocks name the `v*` tag
+  that a legacy repository may push, and the public one says when the full ruleset starts.
+  `release-meta` and `standard-check` name the right file in two messages. The `dependabot.yaml`
+  note of `tools/sync --init` warns against a duplicate entry, and its Checks note no longer
+  names a step number. The config template explains `PRIVACY_ALLOW` and `MAX_BLOB_KB`, and the
+  PowerShell starter names the privileges it holds on a Windows runner
 - The rule pack `base` lets GitHub's support address of every Dependabot sign-off through, so a
   Dependabot pull request, its merge and the history scan no longer fail on it; any other
   address at github.com still hits. The host-name rule no longer reads a last label that goes on

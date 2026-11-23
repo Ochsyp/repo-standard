@@ -88,6 +88,15 @@ block_names() {
     done
 }
 
+@test "both guard-rails blocks name the one tag push that pre-push lets through" {
+    local variant text
+    for variant in private public; do
+        text=$(tr -s ' \n' ' ' < "$REPO_ROOT/blocks/CONTRIBUTING.md/guard-rails@$variant.md")
+        [[ $text == *'every tag push except a `v*` tag under `RELEASE_KIND=legacy`'* ]] ||
+            { printf 'guard-rails@%s does not name the exception\n' "$variant" >&2; return 1; }
+    done
+}
+
 @test "the tests/helpers.bash template sources the standard's lib.bash and parses" {
     grep -q -F '/../.github/standard/tests/lib.bash' "$T/tests/helpers.bash"
     bash -n "$T/tests/helpers.bash"

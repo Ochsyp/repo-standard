@@ -1,8 +1,8 @@
 ## Guard rails
 
-GitHub's ruleset on `main` blocks force pushes and its deletion. From this repository's
-adoption of the standard on, it also blocks direct pushes, and the merge of a pull request whose
-`all-passed` or `scan` check failed.
+GitHub's ruleset on `main` blocks force pushes and its deletion. Once the maintainer has updated
+it after this repository's adoption of the standard, it also blocks direct pushes, and the merge
+of a pull request whose `all-passed` or `scan` check failed.
 
 The hooks in `.githooks/` guard every commit and push:
 - `pre-commit` refuses a commit while `main` or `master` is checked out, a changed copy of the
@@ -10,9 +10,10 @@ The hooks in `.githooks/` guard every commit and push:
   committer that hold a denylist term or a rule pack hit. `pre-merge-commit` does the same for a
   merge.
 - `commit-msg` refuses such a term or hit in the message.
-- `pre-push` refuses a push to `main` or `master`, every tag push (release tags come from
-  publishing a release), a branch or tag name with a term or hit, and what the pushed commits
-  bring in, which covers rebase, cherry-pick and `am` too.
+- `pre-push` refuses a push to `main` or `master`, every tag push except a `v*` tag under
+  `RELEASE_KIND=legacy` (otherwise release tags come from publishing a release), a branch or tag
+  name with a term or hit, and what the pushed commits bring in, which covers rebase, cherry-pick
+  and `am` too.
 
 The denylists hold names that must never be committed and never leave the maintainer's machine.
 The rule packs in `.githooks/rules/` hold the patterns: private addresses, local host names, MAC
