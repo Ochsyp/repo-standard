@@ -30,10 +30,10 @@ file    all      c51eace2dce1e43778a3d64fd6217d29fc369d9f  100755  .github/stand
 file    all      c47bfe96f2d655dcfd54aa7056b49eedf71814e6  100755  .github/standard/bin/secret-scan
 file    all      051e03b747eba544cc0ee2e45cb70dc14ad3f739  100755  .github/standard/bin/standard-check
 file    all      1fee954a0ec0b922e65a395714d66d1b9f9b6792  100755  .github/standard/tests/conf.bats
-file    all      47c34405d4ac95610b48e2b1d648b41321e4be10  100755  .github/standard/tests/hooks.bats
+file    all      544cd28c288b54ccfad3aea28ed81e98e5d5d06d  100755  .github/standard/tests/hooks.bats
 file    all      7d3beb2bf680a7b879863021a7c839e77f2b1dcd  100644  .github/standard/tests/lib.bash
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
-file    all      06855f4394c9cd7c060ca2380e1500a07e1b77bd  100755  .github/standard/tests/privacy-scan.bats
+file    all      4cbf00099413316fa61f5c62642a1a6600992a56  100755  .github/standard/tests/privacy-scan.bats
 file    all      3e6b603f4bffb64bf1422764dbe619dcfb18af96  100755  .github/standard/tests/release-meta.bats
 file    all      ce286a83d9cbfec96e2dedd238fbe7b87d956c68  100755  .github/standard/tests/release-tools.bats
 file    all      8b54937d8ea46d0a68b6dc597ff56c2fca84528c  100755  .github/standard/tests/secret-scan.bats

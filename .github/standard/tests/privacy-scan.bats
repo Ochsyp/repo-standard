@@ -319,6 +319,31 @@ synthetic() {
     [[ $stderr != *"e-mail"* ]]
 }
 
+@test "--history still finds a term in a committed file whose blob a tag also points at" {
+    make_repo
+    write_denylist
+    git -C "$REPO" switch -q -c feat/example
+    commit_config PRIVACY_RULES=base
+    stage notes.txt "notes by $DENY_TERM"
+    git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "docs: notes"
+    git -C "$REPO" tag example-blob "$(git -C "$REPO" rev-parse HEAD:notes.txt)"
+    scan --history
+    [ "$status" -eq 1 ] || { printf 'exit %s\n' "$status" >&2; return 1; }
+    [[ $stderr == *": denylist"* ]]
+}
+
+@test "a PRIVACY_ALLOW line for the empty path does not exempt a blob that a tag names directly" {
+    local blob
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    commit_config PRIVACY_RULES=base 'PRIVACY_ALLOW=e-mail ^$ ^someone@example\.de$'
+    blob=$(printf 'mail someone@%s\n' example.de | git -C "$REPO" hash-object -w --stdin)
+    git -C "$REPO" tag example-blob "$blob"
+    scan --history
+    [ "$status" -eq 1 ] || { printf 'exit %s\n%s\n' "$status" "$stderr" >&2; return 1; }
+    [[ $stderr == *"privacy-scan: blob ${blob:0:12}, line 1: e-mail"* ]]
+}
+
 @test "CRLF in the index is refused, except in -text paths" {
     make_repo
     git -C "$REPO" switch -q -c feat/example
