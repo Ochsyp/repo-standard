@@ -28,6 +28,17 @@ Each version is the GitHub release `vX.Y.Z`.
   release's commit, with another message, unannotated, moved or vanished fails; with
   `--allowed-signers FILE`, each seal must verify for `maintainer` in the sweep's mirror
   (phase 3)
+- `tools/sync --init` prints on stderr what an adoption must still fix by hand: lines that repeat
+  a configuration block, a github-actions entry that is missing or lacks limit 0, a
+  `dependabot.yaml` beside `dependabot.yml`, each Markdown block appended at the end, where an
+  older section on the same topic may stand beside it, the CHANGELOG line and a missing Checks
+  section. The notes never quote the repository's own text, and the pull request text stays the
+  same
+- `tools/sync --init` and `standard-check --local` give a notice for each tracked blob above the
+  `MAX_BLOB_KB` of HEAD, which is the limit the hooks apply, by id and size, with the git command
+  that finds its file, and for a blob they cannot read. The notice says to raise the limit first
+  in a commit of its own, and in a `chore/privacy-*` pull request once the config is on `main`.
+  The size guard and every exit code stay as they are
 
 ### Changed
 

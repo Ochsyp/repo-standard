@@ -330,3 +330,138 @@ block_of() {
         sh "$TGT" "$ZERO"
     [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
 }
+
+# Commit everything in the target with the hooks off.
+commit_target() {
+    git -C "$TGT" add -A
+    git -C "$TGT" -c core.hooksPath=no-hooks commit -q -m "$1"
+}
+
+# The numbers of the lines of file $1 outside its standard blocks that equal one of the other
+# arguments, as "line N" or "lines N, M".
+own_lines() {
+    local file=$1 found
+    shift
+    found=$(printf '%s\n' "$@" | awk '
+        FNR == NR { want[$0] = 1; next }
+        /standard:begin / { inside = 1; next }
+        /standard:end / { inside = 0; next }
+        !inside && ($0 in want) { out = out (out == "" ? "" : ", ") FNR; n++ }
+        END { print (n > 1 ? "lines " : "line ") out }' - "$file")
+    printf '%s' "$found"
+}
+
+# These tests share targets, because each sync run costs CI's Windows job about 20 seconds.
+@test "sync --init names the lines that repeat a configuration block, and leaves them" {
+    local at line='- Repository standard 1.0.0: adopted, with the hooks, checks, workflows and blocks.'
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    printf '%s\n' 'version: 2' 'registries:' '  example:' '    type: npm-registry' 'updates:' \
+        '  - package-ecosystem: npm' '    directory: /' '    schedule:' '      interval: weekly' \
+        > "$TGT/.github/dependabot.yml"
+    printf '%s\n' 'root = true' '' '[*]' 'indent_size = 4' '' '[*.example]' 'indent_size = 4' \
+        > "$TGT/.editorconfig"
+    printf '%s\n' '* text=auto eol=lf' '*.example binary' > "$TGT/.gitattributes"
+    sed 's#OWNER/REPO#example-owner/example#' "$SRC/templates/CHANGELOG.md" > "$TGT/CHANGELOG.md"
+    commit_target "chore: our own configuration"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    at=$(own_lines "$TGT/.github/dependabot.yml" 'version: 2' 'updates:')
+    [[ $at == "lines "* ]]
+    # Deleting only the repeats would nest the entries under registries, so the note moves them.
+    [[ $stderr == *"sync: note: .github/dependabot.yml: $at repeat the block's version or updates. Delete the repeated version and updates. Then put your entries directly below the block's end marker, and any other top-level key such as registries after them."* ]]
+    [[ $stderr == *"sync: note: .github/dependabot.yml: add a github-actions entry for / with open-pull-requests-limit: 0"* ]]
+    # A setting under another section is no repeat; only root and the section header are.
+    at=$(own_lines "$TGT/.editorconfig" 'root = true' '[*]')
+    [[ $stderr == *"sync: note: .editorconfig: $at repeat the block's root or a section header."* ]]
+    # In .gitattributes the last matching line wins, so the note never says to delete outright.
+    at=$(own_lines "$TGT/.gitattributes" '* text=auto eol=lf')
+    [[ $stderr == *"sync: note: .gitattributes: $at repeats the block. The last matching line wins, so check whether a line of yours relies on the repeat before you delete it."* ]]
+    [[ $stderr != *".gitattributes: $at repeats the block. Delete"* ]]
+    # Line numbers go stale with the first edit, so the first note says how to keep them right.
+    [[ $(grep -m 1 'sync: note:' <<< "$stderr") == *"Line numbers hold for the files as sync left them. In each file, delete from the last line up, then move what the notes say to move."* ]]
+    [[ $stderr == *"sync: note: CHANGELOG.md: add under ### Changed: $line"* ]]
+    grep -q -x -F 'indent_size = 4' "$TGT/.editorconfig"
+    [[ $output != *"note:"* ]]
+}
+
+@test "sync --init notes an actions entry without limit 0 and a dependabot.yaml beside the file" {
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    printf '%s\n' 'version: 2' 'updates:' '  - package-ecosystem: github-actions' '    directory: /' \
+        '    schedule:' '      interval: weekly' > "$TGT/.github/dependabot.yml"
+    printf '%s\n' 'version: 2' 'updates: []' > "$TGT/.github/dependabot.yaml"
+    printf '%s\n' '# Contributing' '' '### Checks' '' 'Our checks.' > "$TGT/CONTRIBUTING.md"
+    commit_target "chore: an entry without the limit, and a second file"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: .github/dependabot.yml: set open-pull-requests-limit: 0 on the github-actions entry for /"* ]]
+    [[ $stderr == *"sync: note: .github/dependabot.yaml stands beside .github/dependabot.yml, the file the standard checks. Move your entries into it, leaving out any github-actions entry for /, and put other top-level keys such as registries after them. Then delete the .yaml file."* ]]
+    # A Checks heading of any level counts.
+    [[ $stderr != *"add a ## Checks section"* ]]
+}
+
+@test "sync --init says an older section may stand beside an appended block, and names none" {
+    local short line='- Repository standard 1.0.0: adopted, with the hooks, checks, workflows and blocks.'
+    local says='was appended at the end. An older section on the same topic may stand beside it, so compare them by eye.'
+    make_target
+    mkdir -p "$TGT/.github"
+    printf '%s\n' 'version: 2' 'updates:' '  - package-ecosystem: github-actions' '    directory: /' \
+        '    schedule:' '      interval: weekly' '    open-pull-requests-limit: 0' \
+        > "$TGT/.github/dependabot.yml"
+    printf '%s\n' '# Contributing' '' '## Workflow' '' 'Our old steps.' > "$TGT/CONTRIBUTING.md"
+    printf '%s\n' '# Security' '' '## Reporting' '' 'Our old address.' > "$TGT/SECURITY.md"
+    printf '%s\n' '# Changelog' '' '## [Unreleased]' '' '### Changed' '' "$line" > "$TGT/CHANGELOG.md"
+    head -c 1049600 /dev/zero | tr '\0' a > "$TGT/large-name.dat"
+    commit_target "docs: our own documents"
+    short=$(git -C "$TGT" rev-parse --short=12 HEAD:large-name.dat)
+    # As in a real adoption, the config is written but not committed yet.
+    printf '%s\n' NAME=example VISIBILITY=public RELEASE_KIND=tar SEAL=yes MAX_BLOB_KB=2048 \
+        > "$TGT/.github/standard.conf"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: CONTRIBUTING.md: the block workflow $says templates/CONTRIBUTING.md shows where the block goes."* ]]
+    [[ $stderr == *"sync: note: SECURITY.md: the block reporting $says templates/SECURITY.md shows where the block goes."* ]]
+    [[ $stderr == *"sync: note: SECURITY.md: the block sealed-releases $says templates/SECURITY.md shows where the block goes."* ]]
+    [[ $stderr != *"old section"* ]]
+    [[ $stderr == *"sync: note: CONTRIBUTING.md: add a ## Checks section. Step 4 of the workflow block points to it."* ]]
+    [[ $stderr != *"github-actions entry"* && $stderr != *"note: CHANGELOG.md"* ]]
+    # Without a config in HEAD the hooks use 1024, whatever the new config says.
+    [[ $stderr == *"sync: note: blob $short is 1025 KB, above MAX_BLOB_KB=1024."* ]]
+    # The notes never repeat the repository's own words.
+    [[ $stderr != *"Our old"* && $output != *"note:"* ]]
+}
+
+@test "sync --init into a fresh repository notes only the CHANGELOG line; a later sync notes nothing" {
+    local line='- Repository standard 1.0.0: adopted, with the hooks, checks, workflows and blocks.'
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: CHANGELOG.md: write it from templates/CHANGELOG.md, then add under ### Changed: $line"* ]]
+    [ "$(grep -c 'sync: note:' <<< "$stderr")" -eq 1 ]
+    sed 's#OWNER/REPO#example-owner/example#' "$SRC/templates/CHANGELOG.md" > "$TGT/CHANGELOG.md"
+    commit_target "chore: adopt"
+    run_sync --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr != *"note:"* ]]
+}
+
+@test "sync --init names tracked blobs by id against HEAD's limit, and says when one is unreadable" {
+    local short at_limit ghost
+    ghost=$(printf '%040d' 0 | tr 0 1)
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar MAX_BLOB_KB=1
+    head -c 2048 /dev/zero | tr '\0' a > "$TGT/large-name.dat"
+    head -c 1024 /dev/zero | tr '\0' a > "$TGT/at-limit.dat"
+    commit_target "feat: a large file and one at the limit"
+    short=$(git -C "$TGT" rev-parse --short=12 HEAD:large-name.dat)
+    at_limit=$(git -C "$TGT" rev-parse --short=12 HEAD:at-limit.dat)
+    # Raised in the work tree only: the hooks still read 1 from HEAD.
+    sed -i 's/^MAX_BLOB_KB=1$/MAX_BLOB_KB=1024/' "$TGT/.github/standard.conf"
+    git -C "$TGT" update-index --add --cacheinfo "100644,$ghost,ghost-name.dat"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: blob $short is 2 KB, above MAX_BLOB_KB=1."* ]]
+    [[ $stderr == *"Find its file with: git ls-files -s | grep $short"* ]]
+    [[ $stderr == *"in a commit of its own"* && $stderr == *"chore/privacy-*"* ]]
+    [[ $stderr != *"blob $at_limit"* ]]
+    [[ $stderr == *"sync: note: blob ${ghost:0:12} could not be read, so its size was not compared. Find its file with: git ls-files -s | grep ${ghost:0:12}"* ]]
+    [[ $stderr != *large-name* && $stderr != *ghost-name* && $output != *"$short"* ]]
+}

@@ -405,6 +405,48 @@ make_consumer() {
     [[ $stderr == *"warning: remote upstream is example of another owner than origin"* ]]
 }
 
+@test "--local gives a notice for a tracked blob above the limit in HEAD, and the exit stays" {
+    local short
+    make_consumer
+    write_denylist
+    write_config VISIBILITY=public PRIVACY_RULES=base MAX_BLOB_KB=1
+    head -c 2048 /dev/zero | tr '\0' a > "$REPO/large-name.dat"
+    git -C "$REPO" add -A
+    commit_unchecked "feat: a large file"
+    short=$(git -C "$REPO" rev-parse --short=12 HEAD:large-name.dat)
+    check --local
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"notice: blob $short is 2 KB, above MAX_BLOB_KB=1."* ]]
+    [[ $stderr == *"Find its file with: git ls-files -s | grep $short"* ]]
+    [[ $stderr == *"in a commit of its own"* && $stderr == *"chore/privacy-*"* ]]
+    [[ $stderr != *large-name* ]]
+    check --staged
+    [ "$status" -eq 0 ]
+    [[ $stderr != *"MAX_BLOB_KB"* ]]
+    # A limit raised only in the index does not count: the hooks read it from HEAD.
+    write_config VISIBILITY=public PRIVACY_RULES=base MAX_BLOB_KB=1024
+    git -C "$REPO" add .github/standard.conf
+    check --local
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"notice: blob $short is 2 KB, above MAX_BLOB_KB=1."* ]]
+    commit_unchecked "chore: raise the limit"
+    check --local
+    [ "$status" -eq 0 ]
+    [[ $stderr != *"above MAX_BLOB_KB"* ]]
+}
+
+@test "--local says when it cannot read a tracked blob's size, and the exit stays" {
+    local oid
+    oid=$(printf '%040d' 0 | tr 0 1)
+    make_consumer
+    write_denylist
+    git -C "$REPO" update-index --add --cacheinfo "100644,$oid,ghost-name.dat"
+    check --local
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"notice: blob ${oid:0:12} could not be read, so its size was not compared. Find its file with: git ls-files -s | grep ${oid:0:12}"* ]]
+    [[ $stderr != *ghost-name* && $stderr != *"Raise MAX_BLOB_KB"* ]]
+}
+
 @test "a staged ROLE=source does not switch off the copy checks" {
     make_consumer
     write_config VISIBILITY=public PRIVACY_RULES=base ROLE=source
