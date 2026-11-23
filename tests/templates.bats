@@ -45,6 +45,8 @@ block_names() {
         grep -q -E "^(# )?$key=" "$T/standard.conf" || { printf '%s is missing\n' "$key" >&2; return 1; }
     done
     [ "$(sh "$REPO_ROOT/.github/standard/bin/conf" --get PRIVACY_RULES "$T/standard.conf")" = base ]
+    # An adopter pastes this command, so it names the tool by its real path.
+    grep -q -F 'run sh .github/standard/bin/conf --check' "$T/standard.conf"
 }
 
 @test "the CHANGELOG template passes release-meta with VERSION 0.0.0, before the first release" {
