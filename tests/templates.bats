@@ -45,6 +45,8 @@ block_names() {
         grep -q -E "^(# )?$key=" "$T/standard.conf" || { printf '%s is missing\n' "$key" >&2; return 1; }
     done
     [ "$(sh "$REPO_ROOT/.github/standard/bin/conf" --get PRIVACY_RULES "$T/standard.conf")" = base ]
+    # An adopter pastes this command, so it names the tool by its real path.
+    grep -q -F 'run sh .github/standard/bin/conf --check' "$T/standard.conf"
 }
 
 @test "the CHANGELOG template passes release-meta with VERSION 0.0.0, before the first release" {
@@ -85,6 +87,26 @@ block_names() {
         name=${name%@seal}
         [[ $output != *" $name"* ]] || { printf 'the template holds the markers of %s\n' "$name" >&2; return 1; }
         grep -q -F -e "$name" "$T/SECURITY.md"
+    done
+}
+
+@test "both guard-rails blocks name the one tag push that pre-push lets through" {
+    local variant text
+    for variant in private public; do
+        text=$(tr -s ' \n' ' ' < "$REPO_ROOT/blocks/CONTRIBUTING.md/guard-rails@$variant.md")
+        [[ $text == *'every tag push except a `v*` tag under `RELEASE_KIND=legacy`'* ]] ||
+            { printf 'guard-rails@%s does not name the exception\n' "$variant" >&2; return 1; }
+    done
+}
+
+@test "the checklist line on skipped tests is the same in the template and both tools that print it" {
+    local first second file
+    first=$(grep -F -e 'no test was skipped' "$REPO_ROOT/.github/pull_request_template.md")
+    second=$(grep -A 1 -F -e 'no test was skipped' "$REPO_ROOT/.github/pull_request_template.md" | tail -n 1)
+    [[ $second == *'any other test stage'* ]]
+    for file in tools/sync .github/standard/bin/release-prepare; do
+        grep -q -F -e "$first" "$REPO_ROOT/$file" && grep -q -F -e "$second" "$REPO_ROOT/$file" ||
+            { printf '%s does not hold the checklist line\n' "$file" >&2; return 1; }
     done
 }
 

@@ -394,7 +394,7 @@ own_lines() {
     run_sync --init --to "$TGT"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $stderr == *"sync: note: .github/dependabot.yml: set open-pull-requests-limit: 0 on the github-actions entry for /"* ]]
-    [[ $stderr == *"sync: note: .github/dependabot.yaml stands beside .github/dependabot.yml, the file the standard checks. Move your entries into it, leaving out any github-actions entry for /, and put other top-level keys such as registries after them. Then delete the .yaml file."* ]]
+    [[ $stderr == *"sync: note: .github/dependabot.yaml stands beside .github/dependabot.yml, the file the standard checks. Move your entries into it, leaving out any github-actions entry for / and any entry for a package-ecosystem, directory and target-branch it already covers, and put other top-level keys such as registries after them. Then delete the .yaml file."* ]]
     # A Checks heading of any level counts.
     [[ $stderr != *"add a ## Checks section"* ]]
 }
@@ -422,7 +422,7 @@ own_lines() {
     [[ $stderr == *"sync: note: SECURITY.md: the block reporting $says templates/SECURITY.md shows where the block goes."* ]]
     [[ $stderr == *"sync: note: SECURITY.md: the block sealed-releases $says templates/SECURITY.md shows where the block goes."* ]]
     [[ $stderr != *"old section"* ]]
-    [[ $stderr == *"sync: note: CONTRIBUTING.md: add a ## Checks section. Step 4 of the workflow block points to it."* ]]
+    [[ $stderr == *"sync: note: CONTRIBUTING.md: add a ## Checks section. The workflow block points to it."* ]]
     [[ $stderr != *"github-actions entry"* && $stderr != *"note: CHANGELOG.md"* ]]
     # Without a config in HEAD the hooks use 1024, whatever the new config says.
     [[ $stderr == *"sync: note: blob $short is 1025 KB, above MAX_BLOB_KB=1024."* ]]

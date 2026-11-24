@@ -297,7 +297,7 @@ make_consumer() {
     printf '# shellcheck shell=bash\n' > "$REPO/tests/helpers.bash"
     git -C "$REPO" add .github/standard.conf tests/helpers.bash
     check --staged
-    [[ $stderr == *"ci/lint: missing (CI_STAGES lists lint)"* ]]
+    [[ $stderr == *"ci/lint or ci/lint.ps1: missing (CI_STAGES lists lint)"* ]]
     [[ $stderr == *"tests/helpers.bash: does not source .github/standard/tests/lib.bash"* ]]
     printf '#!/bin/sh\nexit 0\n' > "$REPO/ci/lint.ps1"
     printf 'source "${BASH_SOURCE[0]%%/*}/../.github/standard/tests/lib.bash"\n' > "$REPO/tests/helpers.bash"
