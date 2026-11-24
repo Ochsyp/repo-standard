@@ -92,7 +92,8 @@ exemption and no accepted finding.
 ## Changing the standard
 
 1. A change is a pull request here, from a branch off `main`, with a CHANGELOG line, the tests
-   that prove it, and the MANIFEST rebuilt with `sh tools/manifest`.
+   that prove it, and the MANIFEST rebuilt with `sh tools/manifest`. It also rewrites the blocks
+   in this repository's own documents from `blocks/`; stage what it names.
 2. No copy, no block and no template names a repository of `config/private-names`, and no copy
    names the owner; CI checks both.
 3. Changes collect on `main` until a release pull request (`chore/release-X.Y.Z`, written with

@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # source-check.bats of repo-standard: what holds only here, where tools/manifest and blocks/
-# exist: standard-check with ROLE=source, every rule pack over this repository's whole tree, and
-# the order in which the standard block tells a repository to go public.
+# exist: standard-check with ROLE=source, the blocks of this repository's own documents (the
+# check, the hook and tools/manifest's rewrite), every rule pack over this repository's whole
+# tree, and the order in which the standard block tells a repository to go public.
 # The vendored suites run in every repository of the standard and must not need these paths.
 
 # The sh -c scripts are single-quoted, and bats runs each test in a subshell, both on purpose.
@@ -37,20 +38,26 @@ commit_unchecked() {
     git -C "$REPO" -c core.hooksPath=no-hooks commit -q -m "$1"
 }
 
-@test "repo-standard's own documents hold the block variants its VISIBILITY selects" {
-    # No sync writes the source's own blocks, so this test holds them to the config instead.
-    local vis file name body
-    vis=$(sh "$REPO_ROOT/.github/standard/bin/conf" --get VISIBILITY "$REPO_ROOT/.github/standard.conf")
-    for file in SECURITY.md:reporting SECURITY.md:automated-checks CONTRIBUTING.md:guard-rails; do
-        name=${file#*:}
-        file=${file%%:*}
-        body=$(awk -v n="$name" '
-            $0 == "<!-- standard:end " n " -->" { exit }
-            on { print }
-            $0 == "<!-- standard:begin " n " -->" { on = 1 }' "$REPO_ROOT/$file")
-        [ "$body" = "$(cat "$REPO_ROOT/blocks/$file/$name@$vis.md")" ] ||
-            { printf '%s#%s is not the %s variant\n' "$file" "$name" "$vis" >&2; return 1; }
-    done
+# A copy of this repository's index at $REPO, staged in a new repository with no commit.
+copy_own_tree() {
+    REPO="$BATS_TEST_TMPDIR/copy"
+    git -C "$REPO_ROOT" checkout-index -a --prefix="$REPO/"
+    git init -q -b main "$REPO"
+    git -C "$REPO" config user.name "Test User"
+    git -C "$REPO" config user.email test@example.invalid
+    git -C "$REPO" config core.autocrlf false
+    git -C "$REPO" add -A
+}
+
+@test "repo-standard's own documents pass the source's block check, and a drift in one fails" {
+    copy_own_tree
+    check --staged
+    [ "$status" -eq 0 ]
+    sed -i 's/^## Workflow$/## The workflow/' "$REPO/CONTRIBUTING.md"
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"CONTRIBUTING.md#workflow: the block differs from blocks/; run sh tools/manifest"* ]]
 }
 
 @test "the standard block gives the order for going public: pull request, switch, commit, merge" {
@@ -63,13 +70,7 @@ commit_unchecked() {
 }
 
 @test "repo-standard's whole tree passes every rule pack" {
-    REPO="$BATS_TEST_TMPDIR/copy"
-    git -C "$REPO_ROOT" checkout-index -a --prefix="$REPO/"
-    git init -q -b main "$REPO"
-    git -C "$REPO" config user.name "Test User"
-    git -C "$REPO" config user.email test@example.invalid
-    git -C "$REPO" config core.autocrlf false
-    git -C "$REPO" add -A
+    copy_own_tree
     commit_config 'PRIVACY_RULES=base disk vm'
     run --separate-stderr sh -c 'cd "$1" && exec sh .githooks/privacy-scan --tracked' sh "$REPO"
     [ "$status" -eq 0 ]
@@ -139,6 +140,126 @@ make_source_check_repo() {
     (cd "$REPO" && sh tools/manifest)
     git -C "$REPO" add .github/standard/MANIFEST
     commit_unchecked "chore: the source"
+}
+
+# Write $REPO/CONTRIBUTING.md: own text around the workflow block and the guard-rails block in
+# VARIANT, both from this repository's blocks/.
+write_contributing() {
+    { printf '# Contributing\n\nOwn text before.\n\n'
+      block workflow md CONTRIBUTING.md/workflow.md
+      printf '\nOwn text between.\n\n'
+      block guard-rails md "CONTRIBUTING.md/guard-rails@$1.md"
+      printf '\nOwn text after.\n'; } > "$REPO/CONTRIBUTING.md"
+}
+
+@test "ROLE=source: an own block must be the variant the config selects" {
+    make_source_check_repo
+    write_contributing public
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"CONTRIBUTING.md#guard-rails@private: the block differs from blocks/; run sh tools/manifest"* ]]
+    [[ $stderr != *"CONTRIBUTING.md#workflow"* ]]
+    write_contributing private
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 0 ]
+    [ -z "$stderr" ]
+}
+
+@test "ROLE=source: absent markers pass; markers twice or out of order fail; a seal-only block needs SEAL=yes" {
+    make_source_check_repo
+    # Neither guard-rails nor standard nor releasing has markers here: the source keeps own text.
+    { printf '# Contributing\n\n'; block workflow md CONTRIBUTING.md/workflow.md; } > "$REPO/CONTRIBUTING.md"
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 0 ]
+    block workflow md CONTRIBUTING.md/workflow.md >> "$REPO/CONTRIBUTING.md"
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"CONTRIBUTING.md#workflow: the block's markers appear more than once or out of order"* ]]
+    printf '# Contributing\n\n<!-- standard:end workflow -->\n<!-- standard:begin workflow -->\n' \
+        > "$REPO/CONTRIBUTING.md"
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"CONTRIBUTING.md#workflow: the block's markers appear more than once or out of order"* ]]
+    git -C "$REPO" rm -q --cached CONTRIBUTING.md
+    { printf '# Security\n\n'; block sealed-releases md SECURITY.md/sealed-releases@seal.md; } \
+        > "$REPO/SECURITY.md"
+    git -C "$REPO" add SECURITY.md
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"SECURITY.md#sealed-releases@seal: the block is here, but the config does not set SEAL=yes"* ]]
+}
+
+@test "ROLE=source: pre-commit checks a commit that stages an own block's file, blocks/ or the config" {
+    make_source_check_repo
+    git -C "$REPO" checkout -q -b feat/own-blocks
+    write_contributing public
+    git -C "$REPO" add CONTRIBUTING.md
+    run --separate-stderr git -C "$REPO" commit -q -m "docs: a drifted block"
+    [ "$status" -ne 0 ]
+    [[ $stderr == *"CONTRIBUTING.md#guard-rails@private: the block differs from blocks/"* ]]
+    # Committed with the hooks off, the drift is in HEAD. A commit of tools/ alone runs no check.
+    commit_unchecked "docs: a drifted block"
+    printf '# a comment\n' >> "$REPO/tools/manifest"
+    git -C "$REPO" add tools/manifest
+    run --separate-stderr git -C "$REPO" commit -q -m "chore: touch a tool"
+    [ "$status" -eq 0 ]
+    # Staging the config, or a body in blocks/, runs it.
+    printf '# a comment\n' >> "$REPO/.github/standard.conf"
+    git -C "$REPO" add .github/standard.conf
+    run --separate-stderr git -C "$REPO" commit -q -m "chore: comment the config"
+    [ "$status" -ne 0 ]
+    [[ $stderr == *"CONTRIBUTING.md#guard-rails@private: the block differs from blocks/"* ]]
+    git -C "$REPO" reset -q
+    printf 'One more line.\n' >> "$REPO/blocks/CONTRIBUTING.md/standard.md"
+    git -C "$REPO" add blocks
+    run --separate-stderr git -C "$REPO" commit -q -m "docs: extend a block"
+    [ "$status" -ne 0 ]
+    [[ $stderr == *"CONTRIBUTING.md#guard-rails@private: the block differs from blocks/"* ]]
+}
+
+@test "tools/manifest rewrites the own blocks from blocks/ by the config, keeps the text around them and stages nothing" {
+    local before
+    make_source_check_repo
+    write_contributing private
+    git -C "$REPO" add CONTRIBUTING.md
+    commit_unchecked "docs: contributing"
+    before=$(cat "$REPO/CONTRIBUTING.md")
+    printf 'One more line.\n' >> "$REPO/blocks/CONTRIBUTING.md/workflow.md"
+    git -C "$REPO" add blocks
+    run --separate-stderr sh -c 'cd "$1" && exec sh tools/manifest' sh "$REPO"
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"CONTRIBUTING.md#workflow: rewritten from blocks/"* ]]
+    [[ $stderr != *"guard-rails"* ]]
+    [ -z "$(git -C "$REPO" diff --cached --name-only -- CONTRIBUTING.md)" ]
+    # Only the line added to the body differs, at the end of the workflow block.
+    [ "$(sed '/^One more line\.$/d' "$REPO/CONTRIBUTING.md")" = "$before" ]
+    [ "$(grep -c '^One more line\.$' "$REPO/CONTRIBUTING.md")" -eq 1 ]
+    [ "$(grep -A1 '^One more line\.$' "$REPO/CONTRIBUTING.md")" = "$(printf 'One more line.\n<!-- standard:end workflow -->')" ]
+    git -C "$REPO" add CONTRIBUTING.md .github/standard/MANIFEST
+    check --staged
+    [ "$status" -eq 0 ]
+    # A new VISIBILITY selects the other variant; the check and the rewrite follow the config.
+    sed -i 's/^VISIBILITY=private$/VISIBILITY=public/' "$REPO/.github/standard.conf"
+    git -C "$REPO" add .github/standard.conf
+    check --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"CONTRIBUTING.md#guard-rails@public: the block differs from blocks/"* ]]
+    (cd "$REPO" && sh tools/manifest 2> /dev/null)
+    git -C "$REPO" add CONTRIBUTING.md
+    check --staged
+    [ "$status" -eq 0 ]
+    # Broken markers are left as they are, with a message; the check refuses them.
+    printf '<!-- standard:begin workflow -->\n' >> "$REPO/CONTRIBUTING.md"
+    cp "$REPO/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/broken"
+    run --separate-stderr sh -c 'cd "$1" && exec sh tools/manifest' sh "$REPO"
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"CONTRIBUTING.md#workflow: the markers appear more than once or out of order; not rewritten"* ]]
+    cmp "$REPO/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/broken"
 }
 
 @test "ROLE=source: a template that names a private repository fails, as a copy does" {

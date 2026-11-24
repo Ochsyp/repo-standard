@@ -1,7 +1,10 @@
 #!/bin/sh
 # tools/manifest of repo-standard: writes .github/standard/MANIFEST from the canonical files and
 # the bodies in blocks/ (the standard, section 2.5). It runs here only; it is not vendored.
-#   tools/manifest [--rev REV]          write .github/standard/MANIFEST to the work tree
+#   tools/manifest [--rev REV]          write .github/standard/MANIFEST to the work tree; without
+#                                       --rev, also rewrite the blocks in this repository's own
+#                                       documents from blocks/, in the variants its staged config
+#                                       selects, and say which; it stages nothing
 #   tools/manifest --print [--rev REV]  print it instead
 #   tools/manifest --check [--rev REV]  exit 1 when the MANIFEST there differs from a rebuilt one
 # It reads the index, or the commit REV. Each hash is a git blob id, so it covers the normalised
@@ -122,9 +125,83 @@ printf '%s\n' "$version" | grep -q -x -E '[0-9]+\.[0-9]+\.[0-9]+(-dev)?' ||
     LC_ALL=C sort -k 1,1r -k 5,5 "$tmp/unsorted" || fail "cannot sort the entries"
 } > "$tmp/manifest"
 
+# Rewrite the blocks of repo-standard's own documents in the work tree from the bodies that the
+# MANIFEST lists, in the variants that the staged config selects, as standard-check checks them.
+# A document without a block's markers keeps its own text; broken markers are left for the check.
+own_blocks() {
+    co=$(awk -F '\t' '$2 == ".github/standard.conf" { split($1, m, " "); print m[2] }' "$tmp/tree")
+    [ -n "$co" ] && [ -f .github/standard/bin/conf ] || return 0
+    git cat-file blob "$co" > "$tmp/conf" || fail "cannot read .github/standard.conf"
+    sh .github/standard/bin/conf --print "$tmp/conf" > "$tmp/conf.out" 2> /dev/null ||
+        fail ".github/standard.conf does not parse, so the own blocks were not rewritten"
+    # The selection of standard-check: a seal variant replaces the block of its name where SEAL=yes.
+    awk 'FNR == NR { split($0, kv, "="); c[kv[1]] = substr($0, length(kv[1]) + 2); next }
+        $1 == "block" {
+            p = $2; name = $5; sub(/@.*/, "", name)
+            if (p == "seal") { sealed[name] = 1; if (c["SEAL"] != "yes") next }
+            else if ((p == "public" || p == "private") && c["VISIBILITY"] != p) next
+            else if (p == "release" && c["RELEASE_KIND"] == "legacy") next
+            n++; oid[n] = $3; entry[n] = $5; bname[n] = name; prof[n] = p
+        }
+        END {
+            for (i = 1; i <= n; i++)
+                if (prof[i] == "seal" || !(bname[i] in sealed) || c["SEAL"] != "yes") print oid[i], entry[i]
+        }' "$tmp/conf.out" "$tmp/manifest" > "$tmp/own"
+    while read -r boid entry; do
+        target=${entry%%#*}
+        name=${entry#*#}
+        name=${name%%@*}
+        [ -f "$target" ] || continue
+        git cat-file blob "$boid" > "$tmp/body" || fail "cannot read the body of $entry"
+        case $target in
+            *.md) style=md ;;
+            *) style="hash" ;;
+        esac
+        rc=0
+        NAME=$name STYLE=$style awk -v body="$tmp/body" '
+            BEGIN {
+                if (ENVIRON["STYLE"] == "md") {
+                    b = "<!-- standard:begin " ENVIRON["NAME"] " -->"
+                    e = "<!-- standard:end " ENVIRON["NAME"] " -->"
+                } else {
+                    b = "# standard:begin " ENVIRON["NAME"]
+                    e = "# standard:end " ENVIRON["NAME"]
+                }
+            }
+            { l = $0; cr = sub(/\r$/, "", l) ? "\r" : "" }
+            l == b {
+                if (inb) bad = 1
+                inb = 1; begins++; print
+                while ((getline line < body) > 0) print line cr
+                close(body)
+                next
+            }
+            l == e { if (!inb) bad = 1; inb = 0; ends++; print; next }
+            !inb { print }
+            END {
+                if (begins == 0 && ends == 0) exit 3
+                if (begins != 1 || ends != 1 || inb || bad) exit 4
+            }' "$target" > "$tmp/rewritten" || rc=$?
+        case $rc in
+            0)
+                cmp -s "$tmp/rewritten" "$target" && continue
+                cat "$tmp/rewritten" > "$target" || fail "cannot write $target"
+                printf 'manifest: %s: rewritten from blocks/; stage it\n' "$entry" >&2
+                ;;
+            3) ;;
+            4) printf 'manifest: %s: the markers appear more than once or out of order; not rewritten\n' \
+                "$entry" >&2 ;;
+            *) fail "cannot read $target" ;;
+        esac
+    done < "$tmp/own"
+}
+
 case $action in
     print) cat "$tmp/manifest" ;;
-    write) cp "$tmp/manifest" .github/standard/MANIFEST || fail "cannot write .github/standard/MANIFEST" ;;
+    write)
+        cp "$tmp/manifest" .github/standard/MANIFEST || fail "cannot write .github/standard/MANIFEST"
+        [ -n "$rev" ] || own_blocks
+        ;;
     check)
         mo=$(awk -F '\t' '$2 == ".github/standard/MANIFEST" { split($1, m, " "); print m[2] }' "$tmp/tree")
         [ -n "$mo" ] || { echo "manifest: .github/standard/MANIFEST is missing" >&2; exit 1; }
