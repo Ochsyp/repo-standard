@@ -131,29 +131,37 @@ guard_blob_size_staged() {
     esac
 }
 
-# Run standard-check --staged when the commit stages a path of the standard: a path that the
-# staged MANIFEST lists, anything under .githooks/, .github/standard/ or .github/workflows/, or
-# .github/standard.conf. Only in a repository that uses the standard (ROLE=consumer): without a
-# staged MANIFEST the repository has not adopted it yet, and repo-standard itself (ROLE=source)
-# changes its canonical files between releases. Call after std_load_config.
+# Run standard-check --staged when the commit stages a path of the standard. In a repository that
+# uses the standard (ROLE=consumer): a path that the staged MANIFEST lists, anything under
+# .githooks/, .github/standard/ or .github/workflows/, or .github/standard.conf; without a staged
+# MANIFEST the repository has not adopted it yet. In repo-standard (ROLE=source), which changes its
+# canonical files between releases: a body in blocks/, a document that the staged MANIFEST names a
+# block of, or .github/standard.conf, since the config selects the variants of its own blocks.
+# Call after std_load_config.
 guard_vendored_staged() {
-    [ "$cfg_role" = consumer ] || return 0
+    case $cfg_role in
+        consumer | source) ;;
+        *) return 0 ;;
+    esac
     git cat-file -e :0:.github/standard/MANIFEST 2> /dev/null || return 0
     git cat-file blob :0:.github/standard/MANIFEST > "$std_tmp/manifest" ||
         std_fail "cannot read the staged .github/standard/MANIFEST"
     git -c core.quotePath=false diff --cached --name-only --no-renames > "$std_tmp/staged" ||
         std_fail "cannot list the staged files"
-    awk -v manifest="$std_tmp/manifest" '
+    ROLE=$cfg_role awk -v manifest="$std_tmp/manifest" '
         BEGIN {
+            source = ENVIRON["ROLE"] == "source"
             while ((getline line < manifest) > 0) {
                 if (split(line, f, " ") >= 5 && (f[1] == "file" || f[1] == "block")) {
+                    if (source && f[1] != "block") continue
                     sub(/#.*/, "", f[5])
                     listed[f[5]] = 1
                 }
             }
         }
-        $0 in listed || /^\.githooks\// || /^\.github\/standard\// || /^\.github\/workflows\// ||
-            $0 == ".github/standard.conf" { found = 1 }
+        $0 in listed || $0 == ".github/standard.conf" { found = 1 }
+        source && /^blocks\// { found = 1 }
+        !source && (/^\.githooks\// || /^\.github\/standard\// || /^\.github\/workflows\//) { found = 1 }
         END { exit !found }' "$std_tmp/staged" || return 0
     # standard-check names the paths of the standard's folders that the index holds, also those
     # a commit made with the hooks off brought in. Their names go through the scan first, so that

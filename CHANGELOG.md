@@ -10,6 +10,12 @@ Each version is the GitHub release `vX.Y.Z`.
 ### Changed
 
 - The README's status names 1.1.0 as published, with the seal
+- In repo-standard (`ROLE=source`), `standard-check` also checks the blocks in its own documents:
+  markers that are there must hold the body in `blocks/` that the config selects, once and in
+  order, and a document may leave a block out. The pre-commit hook runs the check when a commit
+  stages `blocks/`, such a document or the config, and `sh tools/manifest` rewrites those blocks
+  from `blocks/`. Its notice on a stale MANIFEST says to run `sh tools/manifest`. Consumers are
+  unchanged
 
 ## [1.1.0] - 2026-11-24
 

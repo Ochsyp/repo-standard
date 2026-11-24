@@ -2,7 +2,7 @@
 # type  profile  blob-id                                   mode    path[#block[@variant]]
 standard 1.1.0
 file    all      941c1c30e14277895654fb9805bef6308a79601c  100755  .githooks/commit-msg
-file    all      b5c4c466975f8ef98ebfa7a69c68838357b686a0  100644  .githooks/lib.sh
+file    all      c1e58e8f2c513cde2b5f6b16c087047c8d448e93  100644  .githooks/lib.sh
 file    all      d5c698aa8c8da0560bb52304c8aafca57a0bf5c3  100755  .githooks/pre-commit
 file    all      a75b31ca1d9056f5487e50c0d1d262725236ce5f  100755  .githooks/pre-merge-commit
 file    all      56c7891c3b469719682a53fae16eca4035887aef  100755  .githooks/pre-push
@@ -28,7 +28,7 @@ file    all      3d504d7817870445c8ec917dfb0f6e102d2b764e  100755  .github/stand
 file    all      ca6920304c4e2abd8491d5cda634358407433b5d  100755  .github/standard/bin/release-verify
 file    all      c51eace2dce1e43778a3d64fd6217d29fc369d9f  100755  .github/standard/bin/run-stage
 file    all      c47bfe96f2d655dcfd54aa7056b49eedf71814e6  100755  .github/standard/bin/secret-scan
-file    all      051e03b747eba544cc0ee2e45cb70dc14ad3f739  100755  .github/standard/bin/standard-check
+file    all      120ec948163c47ee25b9d05ec6c78a38aa8ace88  100755  .github/standard/bin/standard-check
 file    all      1fee954a0ec0b922e65a395714d66d1b9f9b6792  100755  .github/standard/tests/conf.bats
 file    all      544cd28c288b54ccfad3aea28ed81e98e5d5d06d  100755  .github/standard/tests/hooks.bats
 file    all      7d3beb2bf680a7b879863021a7c839e77f2b1dcd  100644  .github/standard/tests/lib.bash
