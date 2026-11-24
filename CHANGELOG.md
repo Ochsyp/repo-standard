@@ -14,7 +14,8 @@ Each version is the GitHub release `vX.Y.Z`.
   markers that are there must hold the body in `blocks/` that the config selects, once and in
   order, and a document may leave a block out. The pre-commit hook runs the check when a commit
   stages `blocks/`, such a document or the config, and `sh tools/manifest` rewrites those blocks
-  from `blocks/`. Consumers are unchanged
+  from `blocks/`. Its notice on a stale MANIFEST says to run `sh tools/manifest`. Consumers are
+  unchanged
 
 ## [1.1.0] - 2026-11-24
 

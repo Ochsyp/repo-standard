@@ -397,7 +397,7 @@ if [ "$role" = source ]; then
             if [ "$release" -eq 1 ]; then
                 problem ".github/standard/MANIFEST: differs from the tree; run tools/manifest"
             else
-                notice ".github/standard/MANIFEST differs from the tree; the release pull request rebuilds it"
+                notice ".github/standard/MANIFEST differs from the tree; run sh tools/manifest"
             fi
         fi
         # Rules 3 and 4 for repo-standard's own documents, over the MANIFEST rebuilt from blocks/:

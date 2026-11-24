@@ -253,6 +253,21 @@ write_contributing() {
     git -C "$REPO" add CONTRIBUTING.md
     check --staged
     [ "$status" -eq 0 ]
+    # A document whose blocks are right is not touched, even without a newline at its end.
+    printf 'No newline at the end.' >> "$REPO/CONTRIBUTING.md"
+    cp "$REPO/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/before"
+    run --separate-stderr sh -c 'cd "$1" && exec sh tools/manifest' sh "$REPO"
+    [ "$status" -eq 0 ]
+    [[ $stderr != *"rewritten"* ]]
+    cmp "$REPO/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/before"
+    # A body changed in blocks/ but not staged: nothing is rewritten from the staged one.
+    printf 'Not staged yet.\n' >> "$REPO/blocks/CONTRIBUTING.md/workflow.md"
+    run --separate-stderr sh -c 'cd "$1" && exec sh tools/manifest' sh "$REPO"
+    [ "$status" -eq 0 ]
+    [[ $stderr == *"blocks/ has changes that are not staged; stage them and run tools/manifest again"* ]]
+    cmp "$REPO/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/before"
+    git -C "$REPO" checkout -q -- blocks
+    printf '\n' >> "$REPO/CONTRIBUTING.md"
     # Broken markers are left as they are, with a message; the check refuses them.
     printf '<!-- standard:begin workflow -->\n' >> "$REPO/CONTRIBUTING.md"
     cp "$REPO/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/broken"

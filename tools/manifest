@@ -134,6 +134,12 @@ own_blocks() {
     git cat-file blob "$co" > "$tmp/conf" || fail "cannot read .github/standard.conf"
     sh .github/standard/bin/conf --print "$tmp/conf" > "$tmp/conf.out" 2> /dev/null ||
         fail ".github/standard.conf does not parse, so the own blocks were not rewritten"
+    # The bodies come from the index, as the MANIFEST does: an unstaged body would be overwritten
+    # by the staged one.
+    if ! git diff --quiet -- blocks; then
+        printf 'manifest: blocks/ has changes that are not staged; stage them and run tools/manifest again\n' >&2
+        return 0
+    fi
     # The selection of standard-check: a seal variant replaces the block of its name where SEAL=yes.
     awk 'FNR == NR { split($0, kv, "="); c[kv[1]] = substr($0, length(kv[1]) + 2); next }
         $1 == "block" {
@@ -158,7 +164,8 @@ own_blocks() {
             *) style="hash" ;;
         esac
         rc=0
-        NAME=$name STYLE=$style awk -v body="$tmp/body" '
+        : > "$tmp/current"
+        NAME=$name STYLE=$style awk -v body="$tmp/body" -v current="$tmp/current" '
             BEGIN {
                 if (ENVIRON["STYLE"] == "md") {
                     b = "<!-- standard:begin " ENVIRON["NAME"] " -->"
@@ -177,14 +184,16 @@ own_blocks() {
                 next
             }
             l == e { if (!inb) bad = 1; inb = 0; ends++; print; next }
-            !inb { print }
+            inb { print l > current; next }
+            { print }
             END {
                 if (begins == 0 && ends == 0) exit 3
                 if (begins != 1 || ends != 1 || inb || bad) exit 4
             }' "$target" > "$tmp/rewritten" || rc=$?
         case $rc in
             0)
-                cmp -s "$tmp/rewritten" "$target" && continue
+                # Only a block that differs is written; the rest of the file stays as it is.
+                cmp -s "$tmp/current" "$tmp/body" && continue
                 cat "$tmp/rewritten" > "$target" || fail "cannot write $target"
                 printf 'manifest: %s: rewritten from blocks/; stage it\n' "$entry" >&2
                 ;;
