@@ -49,6 +49,10 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ### Fixed
 
+- `privacy-scan` reports a hit in a blob that a tag or another ref names directly. Such a blob has
+  no path, and the scan dropped its hits, also when the same blob was a committed file, so
+  `pre-push` and the history scan let it through. The finding names the blob, and a
+  `PRIVACY_ALLOW` path of `^$` does not exempt it
 - The words the first adoption found wrong or missing. The guard-rails blocks name the `v*` tag
   that a legacy repository may push, and the public one says when the full ruleset starts.
   `release-meta` and `standard-check` name the right file in two messages. The `dependabot.yaml`
