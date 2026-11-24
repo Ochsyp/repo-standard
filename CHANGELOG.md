@@ -7,6 +7,8 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-24
+
 ### Added
 
 - The key `SEAL` (`yes` or `no`, default `no`; never with `RELEASE_KIND=legacy`) and the profile
@@ -187,6 +189,7 @@ Each version is the GitHub release `vX.Y.Z`.
   request passes; `standard-check` still holds the release pull request to the whole MANIFEST
   (phase 2)
 
-[Unreleased]: https://github.com/Ochsyp/repo-standard/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/Ochsyp/repo-standard/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Ochsyp/repo-standard/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/Ochsyp/repo-standard/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Ochsyp/repo-standard/releases/tag/v1.0.0
