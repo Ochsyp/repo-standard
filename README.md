@@ -40,8 +40,8 @@ edits the copies; `.github/standard/MANIFEST` lists them.
 
 ## Status
 
-Versions 1.0.0 and 1.0.1 are published. Phase 3 brings the seal: the key `SEAL`, the seal
-blocks, the seal tool and the seal check of `tools/status`, for version 1.1.0.
+Versions 1.0.0, 1.0.1 and 1.1.0 are published. 1.1.0 brings the seal: the key `SEAL`, the seal
+blocks, the seal tool and the seal check of `tools/status`.
 
 ## Checks
 
