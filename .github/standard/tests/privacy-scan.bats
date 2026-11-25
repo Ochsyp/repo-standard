@@ -138,17 +138,17 @@ synthetic() {
     [ -z "$stderr" ]
 }
 
-@test "a label that only starts with lan, local, internal, home.arpa or ts.net is no host name" {
+@test "a label that only starts with local is no host name; one after lan, internal, home.arpa or ts.net still hits" {
     local hit
     make_repo
     git -C "$REPO" switch -q -c feat/example
     commit_config PRIVACY_RULES=base
     {
         printf 'dir x.%s-tools-old\n' local                   # 1 passes
-        printf 'dir y.%s-backup\n' lan                        # 2 passes
-        printf 'dir z.%s-tools\n' internal                    # 3 passes
-        printf 'dir n.home.%s-old\n' arpa                     # 4 passes
-        printf 'dir t.ts.%s-x\n' net                          # 5 passes
+        printf 'dir y.%s-backup\n' lan                        # 2 host-name
+        printf 'dir z.%s-tools\n' internal                    # 3 host-name
+        printf 'dir n.home.%s-old\n' arpa                     # 4 host-name
+        printf 'dir t.ts.%s-x\n' net                          # 5 host-name
         printf 'dir X.%s-AI-OLD\n' LOCAL                      # 6 passes
         printf 'host example-nas.%s-ai.%s\n' local lan        # 7 passes
         printf 'host h.%s\n' local                            # 8 host-name
@@ -162,8 +162,17 @@ synthetic() {
     git -C "$REPO" add hosts.txt
     scan --staged
     [ "$status" -eq 1 ]
-    for hit in 8 9 10 11 12 13 14; do [[ $stderr == *"hosts.txt:$hit: host-name"* ]]; done
-    [ "$(grep -c '^privacy-scan: .*: [a-z0-9-]*$' <<< "$stderr")" -eq 7 ]
+    for hit in 2 3 4 5 8 9 10 11 12 13 14; do [[ $stderr == *"hosts.txt:$hit: host-name"* ]]; done
+    [ "$(grep -c '^privacy-scan: .*: [a-z0-9-]*$' <<< "$stderr")" -eq 11 ]
+    # After lan, the hit is the host name alone, as in 1.0.1, so an exemption written for it fits.
+    # The scan reads the config from HEAD, so it is committed apart from hosts.txt.
+    git -C "$REPO" reset -q -- hosts.txt
+    commit_config PRIVACY_RULES=base "$(printf 'PRIVACY_ALLOW=host-name ^hosts\\.txt$ ^y\\.%s$' lan)"
+    git -C "$REPO" add hosts.txt
+    scan --staged
+    [ "$status" -eq 1 ]
+    [[ $stderr != *"hosts.txt:2: host-name"* ]]
+    [ "$(grep -c '^privacy-scan: .*: [a-z0-9-]*$' <<< "$stderr")" -eq 10 ]
 }
 
 @test "the Dependabot sign-off passes, and another github.com address still hits" {
