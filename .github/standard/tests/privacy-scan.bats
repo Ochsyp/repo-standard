@@ -490,7 +490,7 @@ commit_off() {
         [[ $stderr == *"privacy-scan:   in version ${v:0:12}, brought in by commit $c"$'\n'* ]]
     done
     [ "$(grep -c 'brought in by' <<< "$stderr")" -eq 3 ]
-    # The finding lines read as before: tools/status takes the kind from lines that end in ": KIND".
+    # Each finding line ends in ": KIND": tools/status takes the kind from there.
     [ "$(sed -n 's/^privacy-scan: .*: \([a-z0-9-]*\)$/\1/p' <<< "$stderr" | sort -u)" = e-mail ]
     [[ $stderr != *"someone@"* ]]
     # Only the history scan names commits.
@@ -593,7 +593,7 @@ commit_off() {
     [[ $stderr == *"privacy-scan:   in version ${blob:0:12}, brought in by no commit that a PRIVACY_HISTORY_ACCEPT record can name"* ]]
     [[ $stderr == *"privacy-scan: notes.txt:1: home-path"* ]]
     [[ $stderr == *"privacy-scan:   in version ${v:0:12}, brought in by no commit that a PRIVACY_HISTORY_ACCEPT record can name"* ]]
-    # It is so: a record for the merge itself does not accept that version.
+    # As the message says, a record for the merge itself does not accept that version.
     commit_config PRIVACY_RULES=base "PRIVACY_HISTORY_ACCEPT=$(git -C "$REPO" rev-parse HEAD) home-path"
     scan --history
     [ "$status" -eq 1 ]
@@ -768,7 +768,7 @@ STUB
         GH_TOKEN=synthetic-token-value sh -c 'cd "$1" && exec bash .github/standard/bin/pr-title 7' sh "$REPO"
     [ "$status" -eq 1 ]
     [[ $(cat "$STUB_LOG") == *"repos/example-owner/example/pulls/7"* ]]
-    # Renamed in the browser, then the job runs again.
+    # The pull request is renamed in the browser, and the job runs again.
     printf 'feat: add a mode\n' > "$BATS_TEST_TMPDIR/title"
     run --separate-stderr env PATH="$STUB_BIN:$PATH" GITHUB_REPOSITORY=example-owner/example \
         GH_TOKEN=synthetic-token-value sh -c 'cd "$1" && exec bash .github/standard/bin/pr-title 7' sh "$REPO"

@@ -39,6 +39,13 @@ Each version is the GitHub release `vX.Y.Z`.
   Tracked text that holds one fails the scan at the sync. Rename a real host name; only a name
   that is no host may be exempted, with a `PRIVACY_ALLOW` line in a `chore/privacy-*` pull
   request, since the line names its value
+- Plain writing of the shared text: the block bodies and the comments of the copied hooks, tools
+  and tests say the same in shorter sentences, one idea each. The going-public paragraph of the
+  block `standard` adds that `tools/sync` writes the public block texts, that the maintainer also
+  turns on the ruleset, and that CI on `main` and `tools/status` fail until the pull request
+  merges. The block `guard-rails@public` says that the ruleset blocks direct pushes and the merge
+  of a pull request whose `all-passed` or `scan` check failed, without the wait for an update.
+  No command, check or exit code changes
 
 ## [1.1.0] - 2026-11-24
 

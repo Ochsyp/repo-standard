@@ -2,8 +2,8 @@
 
 - **Secret scan.** GitHub offers no secret scanning for this private repository, so the
   `secret-scan` workflow is its only server-side secret scanner. It runs gitleaks (MIT, pinned by
-  version and SHA-256, always with its default rules) and this repository's rule packs over the
-  commits of each pull request and each push to `main`, and over the whole history every Monday
+  version and SHA-256, always with its default rules) and this repository's rule packs. It scans
+  the commits of each pull request and each push to `main`, and the whole history every Monday
   and when run by hand. Positive controls run first, so a scanner that finds nothing fails.
   Findings are redacted.
 - **Hooks.** The hooks in `.githooks/` check every commit and push on the maintainer's machine:

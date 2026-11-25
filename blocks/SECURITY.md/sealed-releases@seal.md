@@ -7,10 +7,10 @@ seals after the publish, with a seal tool that first checks the release: publish
 neither a draft nor a pre-release, drafted by GitHub Actions, its commit on `main`, and its
 `verify` run green.
 
-A host checks the seal with `git verify-tag` against its own root-owned list of allowed signers,
-and checks its message, that the seal and `vX.Y.Z` name the same commit, that this commit is on
-`main`, that no tag it has seen has moved, and that the version is newer. It needs no GitHub
-token for this and calls no API. A stolen GitHub token or session can publish a release but
-cannot seal it, so no host installs that release. A seal never moves and is never deleted; a
-release that must not be installed stays unsealed, or is held on the hosts as the Release
-contract in `CONTRIBUTING.md` says.
+A host checks the seal with `git verify-tag` against its own root-owned list of allowed signers.
+It also checks the seal's message, that the seal and `vX.Y.Z` name the same commit, that this
+commit is on `main`, that no tag it has seen has moved, and that the version is newer. It needs
+no GitHub token for this and calls no API. A stolen GitHub token or session can publish a
+release but cannot seal it, so no host installs that release. A seal never moves and is never
+deleted. A release that must not be installed stays unsealed, or is held on the hosts as the
+Release contract in `CONTRIBUTING.md` says.
