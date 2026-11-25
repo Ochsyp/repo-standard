@@ -32,7 +32,7 @@
 # (https://github.com by default). "mirrors/" holds the bare mirrors it fetches into. It fetches
 # tags without force, so a tag that moved stops it, and no hook runs there. It never runs a file
 # of a repository, and gh only reads.
-# Exit 0 on success; 1 a check failed or the seal was refused; 2 a step cannot run; 64 usage.
+# Exit 0 on success; 1 a check failed or the seal was refused; 2 a step that cannot run; 64 usage.
 
 # The gh calls, shared with tests/release-seal.bats, which sources this file with SEAL_LIB=1.
 JQ_RELEASE='[.draft, .prerelease, (.immutable // false), (.author.login // ""), (.published_at // "")] | @tsv'
