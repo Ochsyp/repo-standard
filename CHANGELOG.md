@@ -16,6 +16,13 @@ Each version is the GitHub release `vX.Y.Z`.
   stages `blocks/`, such a document or the config, and `sh tools/manifest` rewrites those blocks
   from `blocks/`. Its notice on a stale MANIFEST says to run `sh tools/manifest`. Consumers are
   unchanged
+- The `base` pack's host-name rule exempts a label that goes on with a hyphen and a letter only
+  after `.local`, as in a folder name `x.local-tools`. After `.lan`, `.internal`, `.home.arpa`
+  and `.ts.net` such a name is a host name again, reported with the same value as in 1.0.1, so a
+  host name followed by a hyphen and a word, such as `<host>.lan-backup`, no longer passes.
+  Tracked text that holds one fails the scan at the sync. Rename a real host name; only a name
+  that is no host may be exempted, with a `PRIVACY_ALLOW` line in a `chore/privacy-*` pull
+  request, since the line names its value
 
 ## [1.1.0] - 2026-11-24
 
