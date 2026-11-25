@@ -111,6 +111,44 @@ block_of() {
     [ "$status" -eq 64 ]
 }
 
+# The hooks and privacy-scan read the config from HEAD, and before its first commit they run no
+# rule pack. An adoption that syncs with the config only written would scan with no pack.
+@test "sync --init refuses a config that is not committed, or differs from HEAD's" {
+    local conf=(NAME=example VISIBILITY=public RELEASE_KIND=legacy)
+    # A target with no commit at all.
+    TGT=$BATS_TEST_TMPDIR/empty
+    git init -q -b main "$TGT"
+    mkdir -p "$TGT/.github"
+    printf '%s\n' "${conf[@]}" > "$TGT/.github/standard.conf"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"the target's .github/standard.conf is not committed; commit it on its own first"* ]]
+    # A target with commits, and the config written but not committed: nothing is written.
+    make_target
+    mkdir -p "$TGT/.github"
+    printf '%s\n' "${conf[@]}" > "$TGT/.github/standard.conf"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"the target's .github/standard.conf is not committed; commit it on its own first"* ]]
+    [ "$(git -C "$TGT" status --porcelain)" = '?? .github/' ]
+    # Committed, then changed in the work tree, then staged: both differ from HEAD's.
+    git -C "$TGT" add .github/standard.conf
+    git -C "$TGT" -c core.hooksPath=no-hooks commit -q -m "chore: add the config"
+    printf 'CI_WEEKLY=yes\n' >> "$TGT/.github/standard.conf"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"the target's .github/standard.conf differs from the committed one; commit it on its own first"* ]]
+    git -C "$TGT" add .github/standard.conf
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"differs from the committed one"* ]]
+    [ ! -e "$TGT/.githooks" ] && [ ! -e "$TGT/.github/standard/MANIFEST" ]
+    # Once committed, the adoption runs.
+    git -C "$TGT" -c core.hooksPath=no-hooks commit -q -m "chore: weekly CI"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+}
+
 @test "sync refuses a clone that is not the published, immutable tag, or a MANIFEST unlike the asset" {
     make_target NAME=example VISIBILITY=private RELEASE_KIND=legacy
     release_says true true
@@ -317,6 +355,7 @@ block_of() {
     make_target
     mkdir -p "$TGT/.github" "$TGT/ci" "$TGT/tests"
     cp "$SRC/templates/standard.conf" "$TGT/.github/standard.conf"
+    commit_target "chore: the config"
     run_sync --init --to "$TGT"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     sed 's#OWNER/REPO#example-owner/example#' "$SRC/templates/CHANGELOG.md" > "$TGT/CHANGELOG.md"
@@ -413,9 +452,10 @@ own_lines() {
     head -c 1049600 /dev/zero | tr '\0' a > "$TGT/large-name.dat"
     commit_target "docs: our own documents"
     short=$(git -C "$TGT" rev-parse --short=12 HEAD:large-name.dat)
-    # As in a real adoption, the config is written but not committed yet.
+    # As in a real adoption, the config is committed on its own first, with the raise it needs.
     printf '%s\n' NAME=example VISIBILITY=public RELEASE_KIND=tar SEAL=yes MAX_BLOB_KB=2048 \
         > "$TGT/.github/standard.conf"
+    commit_target "chore: the config"
     run_sync --init --to "$TGT"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $stderr == *"sync: note: CONTRIBUTING.md: the block workflow $says templates/CONTRIBUTING.md shows where the block goes."* ]]
@@ -424,8 +464,8 @@ own_lines() {
     [[ $stderr != *"old section"* ]]
     [[ $stderr == *"sync: note: CONTRIBUTING.md: add a ## Checks section. The workflow block points to it."* ]]
     [[ $stderr != *"github-actions entry"* && $stderr != *"note: CHANGELOG.md"* ]]
-    # Without a config in HEAD the hooks use 1024, whatever the new config says.
-    [[ $stderr == *"sync: note: blob $short is 1025 KB, above MAX_BLOB_KB=1024."* ]]
+    # HEAD's config raises the limit to 2048, so the 1025 KB blob gets no note.
+    [[ $stderr != *"blob $short"* ]]
     # The notes never repeat the repository's own words.
     [[ $stderr != *"Our old"* && $output != *"note:"* ]]
 }
@@ -453,8 +493,6 @@ own_lines() {
     commit_target "feat: a large file and one at the limit"
     short=$(git -C "$TGT" rev-parse --short=12 HEAD:large-name.dat)
     at_limit=$(git -C "$TGT" rev-parse --short=12 HEAD:at-limit.dat)
-    # Raised in the work tree only: the hooks still read 1 from HEAD.
-    sed -i 's/^MAX_BLOB_KB=1$/MAX_BLOB_KB=1024/' "$TGT/.github/standard.conf"
     git -C "$TGT" update-index --add --cacheinfo "100644,$ghost,ghost-name.dat"
     run_sync --init --to "$TGT"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
