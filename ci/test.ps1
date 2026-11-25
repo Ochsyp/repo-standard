@@ -1,7 +1,7 @@
 # ci/test.ps1 of repo-standard, after ci/test on Windows: a smoke test of the PowerShell modules
-# that install-tools installs from their pinned packages (PS_MODULES). The pinned Pester runs one
-# passing test, and the pinned PSScriptAnalyzer must find the one rule a smoke script breaks, so
-# both are known to load and to work under Windows PowerShell 5.1. Then Pester runs
+# that install-tools installs from their pinned packages (PS_MODULES). The pinned Pester must pass
+# one test, and the pinned PSScriptAnalyzer must find the one rule a smoke script breaks. So both
+# are known to load and to work under Windows PowerShell 5.1. Then Pester runs
 # tests/release-seal.Tests.ps1, the tests of the seal dialog, which must all pass, none skipped.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'

@@ -31,13 +31,13 @@
 #             seal verifies for maintainer in the mirror.
 # With --clones, for each REPO=CLONE: the hooks are on, privacy.requireDenylist is on, the global
 # includeIf lines exist, and the denylist loader finds sources and terms (counts only). With
-# --sweep DIR, in mirror clones of its own below DIR (from --git-base, by default
-# https://github.com/OWNER), every branch and tag that moved since the last run goes through
-# privacy-scan --range with this machine's denylists and the packs, and so do the pull request
-# texts and release notes changed since then. Once per run: pins, the advisories of the pinned
-# actions and the newer releases of the actions and tools, and with --token, each token's expiry.
-# --checks limits the run to the listed checks. Exit 0 without a FAIL; 1 with one; 2 when the
-# run cannot start; 64 usage.
+# --sweep DIR, it keeps mirror clones of its own below DIR, cloned from --git-base (by default
+# https://github.com/OWNER). Every branch and tag that moved since the last run goes through
+# privacy-scan --range with this machine's denylists and the packs. The pull request texts and
+# release notes changed since then are scanned too. Once per run: pins, the advisories of the
+# pinned actions and the newer releases of the actions and tools, and with --token, each token's
+# expiry. --checks limits the run to the listed checks. Exit 0 without a FAIL; 1 with one; 2 when
+# the run cannot start; 64 usage.
 
 # The gh calls, shared with tests/status.bats, which sources this file with STATUS_LIB=1.
 RAW='Accept: application/vnd.github.raw'
@@ -69,8 +69,8 @@ JQ_SEAL='[.object.type, .object.sha, (.message | split("\n") | .[0])] | @tsv'
 # The D4 ruleset of a public repository after its adoption.
 D4_RULESET=$'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368,scan:15368\tfalse\t0'
 
-# gh, read-only: gh api with GET only and without a field, which would make it POST, and gh
-# release download. Anything else is refused with 97 before gh runs.
+# Run gh read-only: gh api with GET and no field, since a field makes it POST, or gh release
+# download. Anything else returns 97 before gh runs.
 ghr() {
     local arg prev=''
     case ${1:-} in
@@ -462,8 +462,8 @@ check_clone() {
     emit "$r" clones "$state, requireDenylist on, $includes includeIf line(s), $sources denylist source(s), $terms term(s)"
 }
 
-# privacy-scan with the arguments after the mirror $1, run in that mirror; prints each kind it
-# finds once. Returns 2 when the scan cannot run.
+# Run privacy-scan in the mirror $1 with the remaining arguments, and print each kind it finds
+# once. Returns 2 when the scan cannot run.
 scan_kinds() {
     local mirror=$1 rc=0
     shift
@@ -526,7 +526,7 @@ check_sweep() {
             if [[ -n $k ]]; then printf '%s #%s %s\n' "$r" "$number" "$k"; found=$((found + 1)); fi
         done <<< "$kinds"
     done < <(ghr api --paginate "repos/$s/pulls?state=all&sort=updated&direction=desc&per_page=100" --jq "$JQ_PRS" 2> /dev/null || true)
-    # A release's notes can change after the publish, and its dates do not show it, so every
+    # A release's notes can change after the publish without a date that shows it. So every
     # release's text is read, and scanned when its SHA-256 differs from the last run's.
     : > "$tmp/$r.notes"
     while IFS=$'\t' read -r id tag; do
@@ -702,7 +702,7 @@ for spec in "${repos[@]}"; do
     done
     if (( clones )) && wants clones && [[ $spec == *=* ]]; then check_clone "$name" "${spec#*=}"; fi
     if [[ -n $sweep ]] && wants sweep; then check_sweep "$name"; fi
-    # After the sweep, whose mirror the seals' signatures are checked in.
+    # Runs after the sweep, since the seals' signatures are checked in its mirror.
     if wants seal; then check_seal "$name"; fi
 done
 if wants pins; then check_pins; fi

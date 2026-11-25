@@ -1,10 +1,10 @@
 #!/bin/bash
-# ci/test of repo-standard, the test stage on Windows (CI_RUNNER=windows), in Git Bash: the bats
-# tests of tools/, then the standard's suites but hooks.bats and privacy-scan.bats (the job
-# hooks-windows runs those), all without the lint tag, which ci/system runs on Linux; then
-# no-skips over both runs. One run of the suites takes about a quarter of an hour in Git Bash, so
-# the two scratch consumers run in ci/system only, where the job's 30 minutes hold them. run-stage
-# runs ci/test.ps1 next: the smoke test of the pinned PowerShell modules.
+# ci/test of repo-standard: the test stage on Windows (CI_RUNNER=windows), in Git Bash. It runs
+# the bats tests of tools/, then the standard's suites except hooks.bats and privacy-scan.bats,
+# which the job hooks-windows runs. Neither run takes the tests tagged lint; ci/system runs those
+# on Linux. Then no-skips checks both runs. One run of the suites takes about a quarter of an hour
+# in Git Bash, so the two scratch consumers run in ci/system only, where the job's 30 minutes hold
+# them. run-stage runs ci/test.ps1 next: the smoke test of the pinned PowerShell modules.
 set -euo pipefail
 dir=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/repo-standard-test
 if [[ -e $dir ]]; then
@@ -15,8 +15,8 @@ mkdir -p "$dir"
 bin=$(.github/standard/bin/install-tools bats)
 PATH=$bin:$PATH
 
-# Run the standard's suites of the repository at $2 but the two of hooks-windows, lint aside,
-# with the TAP stream in the file $1.
+# Run the standard's suites of the repository at $2, except the two of hooks-windows and the
+# tests tagged lint. The TAP stream also goes to the file $1.
 suites() {
     local tap=$1 root=$2 file
     local -a files=()

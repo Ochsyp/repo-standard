@@ -3,7 +3,7 @@
 # repository of the standard (spec 6.2), run from a clone of that release's tag (5.3, step 3):
 #   tools/sync [--init] [--summary TEXT] --to DIR
 # It refuses a clone that is not exactly the tag vX.Y.Z of its VERSION, a release that is a draft
-# or not immutable, and a MANIFEST that differs from the release's MANIFEST asset; gh only reads.
+# or not immutable, and a MANIFEST that differs from the release's MANIFEST asset. gh only reads.
 # It refuses when a copy or block it would write, the CHANGELOG line or the pull request text
 # names a repository of config/private-names, and it never prints the name. Then, in DIR, for the
 # profiles that DIR's .github/standard.conf selects, as standard-check selects them:
@@ -16,10 +16,10 @@
 # since the standard needs both files and ci.yml calls image.yml. The releasing block waits for
 # the release adoption. Under SEAL=yes a block's seal variant replaces the block of its name, and
 # a block that exists only as a seal variant, such as SECURITY.md's sealed-releases, needs its
-# markers in the file first. --init adopts a repository that has a config and no MANIFEST yet:
-# CONTRIBUTING.md and SECURITY.md come from templates/ where DIR has none, a block whose markers
-# a file lacks is added at the head of a configuration file or at the end of a document, and a
-# new .github/dependabot.yml gets the github-actions entry at limit 0. Last, it prints the pull
+# markers in the file first. --init adopts a repository that has a config and no MANIFEST yet.
+# CONTRIBUTING.md and SECURITY.md come from templates/ where DIR has none. A block whose markers
+# a file lacks is added at the head of a configuration file, or at the end of a document. A new
+# .github/dependabot.yml gets the github-actions entry at limit 0. Last, it prints the pull
 # request text: the changed files and blocks, the MANIFEST's blob id and the CHANGELOG line.
 # --summary replaces the line's default summary. Paths of this machine are never printed.
 # After that text, --init prints on stderr what the adoption must still fix by hand. The notes
@@ -324,7 +324,8 @@ repeated_lines() {
         !inside && (key($0) in want) { print FNR }' "$tmp/config" "$tmp/config"
 }
 
-# standard-check's rule 6 reads the entry the same way: the limit of github-actions for /.
+# Print the open-pull-requests-limit of the github-actions entry for / in file $1: "none" when
+# the entry sets none, "absent" without the entry. standard-check's rule 6 reads it the same way.
 actions_limit() {
     tr -d '\r' < "$1" | awk '
         function value(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+#.*$/, "", s); gsub(/["\047]/, "", s); return s }
@@ -394,8 +395,9 @@ if (( init )); then
     elif ! grep -q -F -e "$line" "$dir/CHANGELOG.md"; then
         note "CHANGELOG.md: add under ### Changed: $line"
     fi
-    # As in the size guard: every tracked blob but a submodule, named by id, since a path may
-    # hold a private term. The limit is the hooks': HEAD's, or 1024 when HEAD has none that parses.
+    # As in the size guard, every tracked blob but a submodule is checked and named by id, since a
+    # path may hold a private term. The limit is the one the hooks read: HEAD's MAX_BLOB_KB, or
+    # 1024 when HEAD has none that parses.
     limit=1024
     if git -C "$dir" cat-file -e HEAD:.github/standard.conf 2> /dev/null; then
         git -C "$dir" cat-file blob HEAD:.github/standard.conf > "$tmp/head.conf" &&

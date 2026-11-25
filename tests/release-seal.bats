@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# release-seal.bats of repo-standard: tools/release-seal, the seal of D1 = B, against the gh stub
+# release-seal.bats of repo-standard: tools/release-seal, the seal tool, against the gh stub
 # with fixed replies, a bare local origin, and throwaway SSH keys with a passphrase that an
 # askpass stub types. The tests source the tool with SEAL_LIB=1 for its jq filters, so each stub
 # reply answers exactly the call the tool makes. Every value is synthetic.
@@ -13,10 +13,10 @@ NAME=example
 SLUG=$OWNER/$NAME
 PASS='correct horse seal'
 
-# The origin, once per file: main with v1.0.0, a feature, v1.1.0 and v1.1.1 on the same commit
-# (whose VERSION reads 1.1.0), and v1.2.0 on a branch beside main, all with a config that says
-# SEAL=yes. Then on main v1.3.0 to v1.7.0, each with a config that fails the check its own way,
-# and a last commit that says SEAL=yes again. And two keys.
+# Build the origin and two keys once per file. Main has v1.0.0, a feature, and v1.1.0 and v1.1.1
+# on one commit whose VERSION reads 1.1.0; v1.2.0 sits on a branch beside main. Their configs say
+# SEAL=yes. Then main has v1.3.0 to v1.7.0, each with a config that fails the check its own way,
+# and a last commit that says SEAL=yes again.
 setup_file() {
     local work=$BATS_FILE_TMPDIR/work origin=$BATS_FILE_TMPDIR/remote/$OWNER/$NAME.git spec v
     export GIT_CONFIG_GLOBAL=$BATS_FILE_TMPDIR/gitconfig GIT_CONFIG_NOSYSTEM=1

@@ -260,7 +260,8 @@ write_contributing() {
     [ "$status" -eq 0 ]
     [[ $stderr != *"rewritten"* ]]
     cmp "$REPO/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/before"
-    # A body changed in blocks/ but not staged: nothing is rewritten from the staged one.
+    # While a body in blocks/ has changes that are not staged, nothing is rewritten, not even
+    # from the staged body.
     printf 'Not staged yet.\n' >> "$REPO/blocks/CONTRIBUTING.md/workflow.md"
     run --separate-stderr sh -c 'cd "$1" && exec sh tools/manifest' sh "$REPO"
     [ "$status" -eq 0 ]

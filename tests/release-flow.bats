@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
 # release-flow.bats of repo-standard: the release tools in the checkouts that release.yml gives
-# their jobs. draft, promote and verify check out only some directories, in cone mode, so a tool
-# that needs a file outside them fails only after a publish, as the verify job of v1.0.0 did. Each
-# test makes that sparse checkout of a synthetic released repository with git itself, from the
-# directories release.yml lists for the job, and runs the job's tool there with the gh and docker
-# stubs. Every value is synthetic.
+# their jobs. The draft, promote and verify jobs check out only some directories, in cone mode,
+# so a tool that needs a file outside them fails only after a publish. Each test makes that sparse
+# checkout of a synthetic released repository with git itself, from the directories release.yml
+# lists for the job. It runs the job's tool there with the gh and docker stubs. Every value is
+# synthetic.
 
 # The sh -c scripts are single-quoted, and bats runs each test in a subshell, both on purpose.
 # shellcheck disable=SC2016,SC2030,SC2031

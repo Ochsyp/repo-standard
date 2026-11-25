@@ -4,12 +4,12 @@ The repository standard shared by the owner's repositories: git hooks and privac
 release and secret-scan workflows, Dependabot, a pull request template and bats tests. This
 repository holds the canonical files at their real paths and publishes immutable versions
 `vX.Y.Z`. Each repository of the standard vendors a published version with `tools/sync` and never
-edits the copies; `.github/standard/MANIFEST` lists them.
+edits the copies. `.github/standard/MANIFEST` lists them.
 
 ## Layout
 
 - `.githooks/`: the hooks, `privacy-scan`, `lib.sh` and the rule packs in `rules/`.
-- `.github/workflows/`: the four canonical workflows, live here too: `ci`, `secret-scan`,
+- `.github/workflows/`: the four canonical workflows, which also run here: `ci`, `secret-scan`,
   `release` and `image`.
 - `.github/standard/bin/`: `conf`, `standard-check`, `install-tools`, `run-stage`, `no-skips`,
   `pr-text`, `pr-title`, `changelog-entry`, `secret-scan`, the release tools `release-meta`,
@@ -19,7 +19,7 @@ edits the copies; `.github/standard/MANIFEST` lists them.
   `gh`, `docker` and `gitleaks` stubs. `.github/standard/actions.allow`: the actions the
   workflows may use.
 - `blocks/`: the canonical body of each block that repositories carry inside files they own,
-  such as `blocks/SECURITY.md/reporting@private.md`; a hidden name's leading dot is written as `_`
+  such as `blocks/SECURITY.md/reporting@private.md`. A hidden name's leading dot is written as `_`
   there (`blocks/_github/dependabot.yml/`), since git refuses a folder named `.gitattributes`.
 - `config/private-names`: the private repositories that no copy or block may name; never
   vendored.
@@ -27,7 +27,7 @@ edits the copies; `.github/standard/MANIFEST` lists them.
   consumer, of a public or a private shape, that holds only what the MANIFEST vendors plus files
   of its own, where CI runs the standard's suites again. `tests/` holds the tests of `tools/`.
 - `tools/sync`: writes a published release into a repository's worktree, run from a clone of
-  its tag; `--init` adopts a repository. `tools/status`: the read-only daily audit of the
+  its tag. `--init` adopts a repository. `tools/status`: the read-only daily audit of the
   repositories.
 - `tools/release-seal`, `tools/release-seal.ps1` and `tools/release-seal-askpass`: the seal tool
   of the repositories with `SEAL=yes`, its dialog and its passphrase dialog, released as assets
@@ -52,9 +52,9 @@ blocks, the seal tool and the seal check of `tools/status`.
   standard's suites where only the vendored files exist, as in a consumer.
 - On Windows, `ci/test.ps1` under Windows PowerShell 5.1 with the pinned modules: the Pester
   tests of the seal dialog (CONTRIBUTING.md, Checks).
-- CI: `ci.yml` runs the job `standard` (every vendored suite on Linux, the lint, the privacy
-  packs, the MANIFEST and the pull request checks), the stage `test` on Windows (`ci/test`, then
-  the smoke test of the pinned PowerShell modules), the stage `system` on Linux (the suites,
-  lint included, in a scratch consumer of each shape) and `hooks-windows`, and fails on any
-  skipped test. `secret-scan.yml` scans each pull request's commits, and `release.yml` builds a
+- CI: `ci.yml` runs the job `standard`: every vendored suite on Linux, the lint, the privacy
+  packs, the MANIFEST and the pull request checks. It also runs the stage `test` on Windows
+  (`ci/test`, then the smoke test of the pinned PowerShell modules), the stage `system` on Linux
+  (the suites, lint included, in a scratch consumer of each shape) and `hooks-windows`. It fails
+  on any skipped test. `secret-scan.yml` scans each pull request's commits. `release.yml` builds a
   pull request that touches the release files twice and compares the builds.
