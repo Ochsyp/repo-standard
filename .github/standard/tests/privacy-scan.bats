@@ -164,15 +164,15 @@ synthetic() {
     [ "$status" -eq 1 ]
     for hit in 2 3 4 5 8 9 10 11 12 13 14; do [[ $stderr == *"hosts.txt:$hit: host-name"* ]]; done
     [ "$(grep -c '^privacy-scan: .*: [a-z0-9-]*$' <<< "$stderr")" -eq 11 ]
-    # After lan, the hit is the host name alone, as in 1.0.1, so an exemption written for it fits.
-    # The scan reads the config from HEAD, so it is committed apart from hosts.txt.
+    # After the other suffixes, the hit is the host name alone, as in 1.0.1, so an exemption
+    # written for it fits. The scan reads the config from HEAD, so it is committed apart.
     git -C "$REPO" reset -q -- hosts.txt
-    commit_config PRIVACY_RULES=base "$(printf 'PRIVACY_ALLOW=host-name ^hosts\\.txt$ ^y\\.%s$' lan)"
+    commit_config PRIVACY_RULES=base "$(printf 'PRIVACY_ALLOW=host-name ^hosts\\.txt$ ^(y\\.%s|z\\.%s|n\\.home\\.%s|t\\.ts\\.%s)$' lan internal arpa net)"
     git -C "$REPO" add hosts.txt
     scan --staged
     [ "$status" -eq 1 ]
-    [[ $stderr != *"hosts.txt:2: host-name"* ]]
-    [ "$(grep -c '^privacy-scan: .*: [a-z0-9-]*$' <<< "$stderr")" -eq 10 ]
+    for hit in 2 3 4 5; do [[ $stderr != *"hosts.txt:$hit: host-name"* ]]; done
+    [ "$(grep -c '^privacy-scan: .*: [a-z0-9-]*$' <<< "$stderr")" -eq 7 ]
 }
 
 @test "the Dependabot sign-off passes, and another github.com address still hits" {
