@@ -8,8 +8,8 @@
 #             repository (rule 7), and loosening comes in a chore/privacy-* pull request of its
 #             own (rule 10). Reads EVENT, PRIVATE, BASE, HEAD_REF, HEAD_REPO and REPO.
 #   --staged  checks the index; the pre-commit hook runs it where the standard is adopted.
-#   --local   as --staged, plus whether the hooks are on, what the denylist loader finds (counts
-#             only), remotes of another owner, as in a fork clone, and a notice for each tracked
+#   --local   as --staged, plus: whether the hooks are on; what the denylist loader finds (counts
+#             only); remotes of another owner, as in a fork clone; and a notice for each tracked
 #             blob above the MAX_BLOB_KB of HEAD, which is the limit the hooks apply.
 # Exit 0; 1 when a rule fails; 2 when a check cannot run; 64 usage.
 set -eu
@@ -181,7 +181,7 @@ fi
 # beyond it. With SCOPE blocks (repo-standard): the blocks only. Prints the problems it finds in
 # the copies and writes the selected blocks to $3 as "blob-id entry" lines, "-" for a block that
 # must be absent. A block's seal variant (profile seal) replaces the block of its name where
-# SEAL=yes; a block that exists only as a seal variant must be absent elsewhere.
+# SEAL=yes. A block that exists only as a seal variant must be absent elsewhere.
 manifest_rules() {
     SCOPE=$2 VIS=$visibility LIC=$license KIND=$kind SEAL=$seal awk -v tree="$t/tree" -v blocks="$3" '
         BEGIN {
@@ -241,7 +241,7 @@ manifest_rules() {
 
 # Each block of the list $1, as manifest_rules writes it, against the tree. With $2 consumer a
 # block must be there and equal the MANIFEST. With $2 source a document may leave a block's markers
-# out, as repo-standard does with the standard block, whose text speaks to a consumer; markers
+# out, as repo-standard does with the standard block, whose text speaks to a consumer. Markers
 # that are there must hold the body in blocks/ that the config selects, once and in order.
 check_blocks() {
     while read -r want entry; do
@@ -358,7 +358,8 @@ ho=$(oid_of tests/helpers.bash)
 if [ -n "$ho" ] && ! git cat-file blob "$ho" | grep -q -F '/../.github/standard/tests/lib.bash'; then
     problem "tests/helpers.bash: does not source .github/standard/tests/lib.bash"
 fi
-# gitleaks' inline allow marker would hide its line from the secret scan; built from fragments.
+# gitleaks' inline allow marker would hide its line from the secret scan. The marker is built
+# from fragments, so this file does not hold it.
 marker="gitleaks"":allow"
 if [ "$mode" = --ci ]; then
     git -c core.quotePath=false grep -I -l -F -e "$marker" HEAD > "$t/marked" 2> /dev/null || true
@@ -375,9 +376,9 @@ for path in .github/workflows/tests.yml .github/workflows/validate.yml .githooks
     [ -z "$(oid_of "$path")" ] || problem "$path: removed by the standard; delete it"
 done
 
-# Rule 9, in repo-standard: the MANIFEST rebuilt from the tree and blocks/ equals the committed
-# one (an error on the release pull request, a notice otherwise), the blocks in repo-standard's own
-# documents are the variants its config selects, and no copy or block names a repository of
+# Rule 9, in repo-standard. The MANIFEST rebuilt from the tree and blocks/ equals the committed
+# one: an error on the release pull request, a notice otherwise. The blocks in repo-standard's own
+# documents are the variants its config selects. No copy or block names a repository of
 # config/private-names.
 if [ "$role" = source ]; then
     if [ "$mode" = --ci ]; then set -- --print --rev HEAD; else set -- --print; fi

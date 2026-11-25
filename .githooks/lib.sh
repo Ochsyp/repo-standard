@@ -131,13 +131,13 @@ guard_blob_size_staged() {
     esac
 }
 
-# Run standard-check --staged when the commit stages a path of the standard. In a repository that
-# uses the standard (ROLE=consumer): a path that the staged MANIFEST lists, anything under
-# .githooks/, .github/standard/ or .github/workflows/, or .github/standard.conf; without a staged
-# MANIFEST the repository has not adopted it yet. In repo-standard (ROLE=source), which changes its
-# canonical files between releases: a body in blocks/, a document that the staged MANIFEST names a
-# block of, or .github/standard.conf, since the config selects the variants of its own blocks.
-# Call after std_load_config.
+# Run standard-check --staged when the commit stages a path of the standard. Without a staged
+# MANIFEST it does nothing: the repository has not adopted the standard yet. In a repository that
+# uses the standard (ROLE=consumer), such a path is one the staged MANIFEST lists, anything under
+# .githooks/, .github/standard/ or .github/workflows/, or .github/standard.conf. In repo-standard
+# (ROLE=source), which changes its canonical files between releases, it is a body in blocks/, a
+# document that the staged MANIFEST names a block of, or .github/standard.conf, since the config
+# selects the variants of its own blocks. Call after std_load_config.
 guard_vendored_staged() {
     case $cfg_role in
         consumer | source) ;;
@@ -163,8 +163,8 @@ guard_vendored_staged() {
         source && /^blocks\// { found = 1 }
         !source && (/^\.githooks\// || /^\.github\/standard\// || /^\.github\/workflows\//) { found = 1 }
         END { exit !found }' "$std_tmp/staged" || return 0
-    # standard-check names the paths of the standard's folders that the index holds, also those
-    # a commit made with the hooks off brought in. Their names go through the scan first, so that
+    # standard-check names every path of the standard's folders in the index, including any that
+    # a commit made with the hooks off brought in. These names go through the scan first, so that
     # nothing shows a name that holds a finding.
     git -c core.quotePath=false ls-files -- .githooks .github/standard .github/workflows \
         > "$std_tmp/guard.names" || std_fail "cannot list the standard's folders"
@@ -381,10 +381,10 @@ deny_enforce() {
 
 # The rule engine. scan_begin makes the work folder $std_scan. The collectors add units of text:
 # blobs, commits and tag objects by object id, and a message or the identity as a file. scan_run
-# puts the path names and every unit into one stream, each behind a marker line, strips the NUL
-# bytes once (so UTF-16 text matches as UTF-8 text does), runs each rule and the denylist once
-# over the stream, maps each hit back to its unit and line, drops exempt and accepted hits, and
-# prints "privacy-scan: WHERE: KIND" per finding on stderr. A path whose name holds a hit is
+# puts the path names and every unit into one stream, each behind a marker line. It strips the NUL
+# bytes once, so UTF-16 text matches as UTF-8 text does. It runs each rule and the denylist once
+# over the stream, maps each hit back to its unit and line, and drops exempt and accepted hits.
+# It prints "privacy-scan: WHERE: KIND" per finding on stderr. A path whose name holds a hit is
 # shown only as "path name N", never by name.
 scan_begin() {
     std_tmpdir
@@ -741,14 +741,14 @@ scan_run() {
     return 1
 }
 
-# For --history: write $std_scan/findings.out, the findings with a line under each finding in
-# file content for each version (blob) behind it. The line names, by full SHA in git log order,
-# the commits whose PRIVACY_HISTORY_ACCEPT record would accept that version: those that bring it
-# in as scan_accept reads a commit, with diff-tree. Those that HEAD holds come first; the others
-# are marked as outside HEAD, since the secret scan accepts only a record whose commit the base
-# holds. A merge brings in nothing for diff-tree, and neither does a ref that names a blob
-# directly, so a version only they bring in gets a line that says so. One git log pass over every
-# ref, and only when a history scan has findings in file content.
+# For --history: write $std_scan/findings.out, the findings plus, under each finding in file
+# content, one line for each version (blob) behind it. That line names, by full SHA in git log
+# order, the commits whose PRIVACY_HISTORY_ACCEPT record would accept the version: those that bring
+# it in as scan_accept reads a commit, with diff-tree. Commits that HEAD holds come first. The
+# others are marked as outside HEAD, since the secret scan accepts only a record whose commit the
+# base holds. A merge brings in nothing for diff-tree, and neither does a ref that names a blob
+# directly, so a version only they bring in gets a line that says so. It makes one git log pass
+# over every ref, and only when a history scan has findings in file content.
 scan_commits() {
     LC_ALL=C sort -u "$std_scan/fblobs" > "$std_scan/fblobs.u" ||
         std_fail "cannot list the versions behind the findings"
