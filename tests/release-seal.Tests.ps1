@@ -30,7 +30,7 @@ BeforeAll {
 Describe 'ConvertFrom-SealOutput' {
     It 'reads the checks, the facts and the commits since the base' {
         $result = ConvertFrom-SealOutput -Lines (Get-GoodLine)
-        @($result.Checks).Count | Should -Be 6
+        @($result.Checks).Count | Should -Be 7
         $result.Checks[0].Name | Should -Be 'published'
         $result.Checks[0].Result | Should -Be 'ok'
         $result.Commit | Should -Be '0123456789abcdef0123456789abcdef01234567'

@@ -14,6 +14,7 @@
 #   drafted    github-actions[bot] drafted it
 #   commit     the tag's commit is on main
 #   version    VERSION at that commit reads X.Y.Z
+#   configured .github/standard.conf at that commit sets SEAL=yes, once
 #   verify     the newest run of release.yml for that commit's release event ended in success
 #   unsealed   no seal/vX.Y.Z exists
 # and the facts: commit, pr (the pull request of the commit), base (the newest seal, else the
@@ -227,9 +228,12 @@ facts() {
 # config is read as data, by its blob, and never run. Only the release's commit counts: a config
 # on main that says SEAL=yes later does not make an older release sealable.
 configured() {
-    local entry seals
+    local entry oid seals
+    # "MODE blob OID<TAB>PATH", read by its object id, since git in Git Bash may rewrite a REV:PATH.
     entry=$(mgit ls-tree "$1" -- .github/standard.conf 2> /dev/null) || entry=''
-    if [[ $entry != *' blob '* ]] || ! mgit cat-file blob "${entry#* blob }" > "$tmp/conf" 2> /dev/null; then
+    oid=${entry#* blob }
+    oid=${oid%%$'\t'*}
+    if [[ $entry != *' blob '* ]] || ! mgit cat-file blob "$oid" > "$tmp/conf" 2> /dev/null; then
         report configured FAIL "$tag has no readable .github/standard.conf"
         return
     fi
