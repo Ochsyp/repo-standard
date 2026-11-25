@@ -123,7 +123,7 @@ function ConvertFrom-SealOutput {
 function Test-SealReady {
     <# True when each check of release-seal is there, once, and passed. #>
     param([Parameter(Mandatory = $true)] $Result)
-    foreach ($name in @('published', 'drafted', 'commit', 'version', 'verify', 'unsealed')) {
+    foreach ($name in @('published', 'drafted', 'commit', 'version', 'configured', 'verify', 'unsealed')) {
         $found = @($Result.Checks | Where-Object { $_.Name -eq $name })
         if ($found.Count -ne 1 -or $found[0].Result -ne 'ok') { return $false }
     }

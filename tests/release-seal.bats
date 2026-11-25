@@ -14,16 +14,20 @@ SLUG=$OWNER/$NAME
 PASS='correct horse seal'
 
 # The origin, once per file: main with v1.0.0, a feature, v1.1.0 and v1.1.1 on the same commit
-# (whose VERSION reads 1.1.0), and v1.2.0 on a branch beside main; and two keys.
+# (whose VERSION reads 1.1.0), and v1.2.0 on a branch beside main, all with a config that says
+# SEAL=yes. Then on main v1.3.0 to v1.7.0, each with a config that fails the check its own way,
+# and a last commit that says SEAL=yes again. And two keys.
 setup_file() {
-    local work=$BATS_FILE_TMPDIR/work origin=$BATS_FILE_TMPDIR/remote/$OWNER/$NAME.git
+    local work=$BATS_FILE_TMPDIR/work origin=$BATS_FILE_TMPDIR/remote/$OWNER/$NAME.git spec v
     export GIT_CONFIG_GLOBAL=$BATS_FILE_TMPDIR/gitconfig GIT_CONFIG_NOSYSTEM=1
     printf '[user]\n\tname = Seal Test\n\temail = seal-test@example.invalid\n' > "$GIT_CONFIG_GLOBAL"
     mkdir -p "${origin%/*}"
     git init -q --bare "$origin"
     git init -q -b main "$work"
     printf '1.0.0\n' > "$work/VERSION"
-    git -C "$work" add VERSION
+    mkdir -p "$work/.github"
+    printf 'NAME=example\nSEAL=yes\n' > "$work/.github/standard.conf"
+    git -C "$work" add VERSION .github/standard.conf
     git -C "$work" commit -q -m "chore(release): 1.0.0 (#1)"
     git -C "$work" tag v1.0.0
     printf 'Text.\n' > "$work/README.md"
@@ -37,7 +41,29 @@ setup_file() {
     printf '1.2.0\n' > "$work/VERSION"
     git -C "$work" commit -q -a -m "chore: a release beside main"
     git -C "$work" tag v1.2.0
-    git -C "$work" push -q "$origin" main side v1.0.0 v1.1.0 v1.1.1 v1.2.0
+    git -C "$work" switch -q main
+    # SEAL=no, no SEAL line, SEAL twice, no config, and a value that is not yes.
+    for spec in '1.3.0|NAME=example\nSEAL=no' '1.4.0|NAME=example' \
+        '1.5.0|NAME=example\nSEAL=yes\nSEAL=yes' '1.6.0|-' '1.7.0|NAME=example\nSEAL=Yes'; do
+        v=${spec%%|*}
+        printf '%s\n' "$v" > "$work/VERSION"
+        if [[ ${spec#*|} == - ]]; then
+            git -C "$work" rm -q .github/standard.conf
+        else
+            mkdir -p "$work/.github"
+            # shellcheck disable=SC2059 # the spec holds the \n escapes on purpose.
+            printf "${spec#*|}\n" > "$work/.github/standard.conf"
+        fi
+        git -C "$work" add -A
+        git -C "$work" commit -q -m "chore(release): $v"
+        git -C "$work" tag "v$v"
+    done
+    mkdir -p "$work/.github"
+    printf 'NAME=example\nSEAL=yes\n' > "$work/.github/standard.conf"
+    git -C "$work" add -A
+    git -C "$work" commit -q -m "chore: SEAL=yes again"
+    git -C "$work" push -q "$origin" main side v1.0.0 v1.1.0 v1.1.1 v1.2.0 v1.3.0 v1.4.0 v1.5.0 \
+        v1.6.0 v1.7.0
     ssh-keygen -q -t ed25519 -N "$PASS" -C seal-test -f "$BATS_FILE_TMPDIR/key"
     ssh-keygen -q -t ed25519 -N "$PASS" -C other-test -f "$BATS_FILE_TMPDIR/other"
     printf 'maintainer namespaces="git" %s\n' "$(cat "$BATS_FILE_TMPDIR/key.pub")" \
@@ -137,9 +163,10 @@ refute_sealed() {
     local name
     run_seal check --repo "$SLUG" --version 1.1.0
     [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
-    for name in published drafted commit version verify unsealed; do
+    for name in published drafted commit version configured verify unsealed; do
         has $'check\tok\t'"$name"$'\t'
     done
+    has $'check\tok\tconfigured\tSEAL=yes at the commit of v1.1.0'
     has $'fact\tcommit\t'"$(commit_of v1.1.0)"
     has $'fact\tpr\t#3 chore(release): 1.1.0'
     has $'fact\tbase\tv1.0.0'
@@ -191,6 +218,31 @@ refute_sealed() {
     [ "$status" -eq 1 ]
     has $'check\tFAIL\tpublished\tno release v9.9.9'
     has $'check\tFAIL\tcommit\tno tag v9.9.9'
+    has $'check\tFAIL\tconfigured\tno tag v9.9.9'
+}
+
+@test "check and seal refuse a release whose config at its commit does not say SEAL=yes" {
+    local spec v reason
+    # Main says SEAL=yes again after these releases; only the config at the release's commit counts.
+    for spec in '1.3.0|the config at v1.3.0 does not set SEAL=yes' \
+        '1.4.0|the config at v1.4.0 does not set SEAL=yes' \
+        '1.5.0|the config at v1.5.0 sets SEAL more than once' \
+        '1.6.0|v1.6.0 has no readable .github/standard.conf' \
+        '1.7.0|the config at v1.7.0 does not set SEAL=yes'; do
+        v=${spec%%|*}
+        reason=${spec#*|}
+        release_ok "$v"
+        run_seal check --repo "$SLUG" --version "$v"
+        [ "$status" -eq 1 ] || { printf '%s: exit %s\n%s\n' "$v" "$status" "$output" >&2; return 1; }
+        has $'check\tFAIL\tconfigured\t'"$reason"
+        has $'check\tok\tcommit\t'
+        has $'check\tok\tversion\t'
+        has $'check\tok\tunsealed\t'
+        run_seal seal --repo "$SLUG" --version "$v"
+        [ "$status" -eq 1 ]
+        has $'check\tFAIL\tconfigured\t'"$reason"
+        refute_sealed "$v"
+    done
 }
 
 @test "seal pushes seal/vX.Y.Z on the release's commit, which verify-tag accepts for maintainer" {
