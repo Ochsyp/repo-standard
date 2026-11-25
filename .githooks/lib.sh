@@ -396,6 +396,8 @@ scan_begin() {
     printf 'second pass\n' > "$std_scan/pass2"
     std_pseudo=0
     std_listing=
+    # Set by --history: name the commits behind each file finding (scan_commits).
+    std_history=
 }
 
 # Add the text of FILE as a unit of TYPE (message or identity).
@@ -600,7 +602,8 @@ scan_run() {
     done < "$std_scan/cfgoids"
     # Map each hit to its unit, in two passes over the hit files: the path names first, so that
     # every path whose name holds a hit is known before a content hit could show it. Writes
-    # rec.KIND (kind, path, where, value), vals.KIND and paths.KIND for each kind found.
+    # rec.KIND (kind, path, where, value, and the blob for a hit in file content), vals.KIND and
+    # paths.KIND for each kind found.
     LC_ALL=C awk -v us="$std_us" -v dir="$std_scan" -v mark="$std_mark" '
         function unit(n,    lo, hi, mid, at) {
             lo = 1; hi = nm; at = 0
@@ -610,10 +613,10 @@ scan_run() {
             }
             return at
         }
-        function emit(kind, id, path, where, value) {
+        function emit(kind, id, path, where, value, blob) {
             if (id != "" && (kind us id) in accu) return
             if (id == "" && path != "" && (kind us path) in accp) return
-            print kind us path us where us value > (dir "/rec." kind)
+            print kind us path us where us value us blob > (dir "/rec." kind)
             print value > (dir "/vals." kind)
             print path > (dir "/paths." kind)
             if (!(kind in found)) { found[kind] = 1; print kind > (dir "/kinds") }
@@ -657,12 +660,12 @@ scan_run() {
                 if (c == 0) { c = 1; paths[1] = "" }
                 for (j = 1; j <= c; j++) {
                     if (paths[j] == "") {
-                        emit(kind, id, "/no-path", "blob " substr(id, 1, 12) ", line " line, value)
+                        emit(kind, id, "/no-path", "blob " substr(id, 1, 12) ", line " line, value, id)
                         continue
                     }
                     if (kind != "denylist" && paths[j] == ".github/standard.conf" &&
                         ((id us line us kind) in cfga)) continue
-                    emit(kind, id, paths[j], shown(paths[j]) ":" line, value)
+                    emit(kind, id, paths[j], shown(paths[j]) ":" line, value, id)
                 }
             } else if (utype[id] == "commit") {
                 emit(kind, id, "", "commit " ulabel[id] ", line " line " of git cat-file -p", value)
@@ -693,7 +696,8 @@ scan_run() {
     for std_f in "$std_scan"/drop.*; do
         [ -e "$std_f" ] && set -- "$@" "$std_f"
     done
-    LC_ALL=C awk -v us="$std_us" '
+    : > "$std_scan/fblobs"
+    LC_ALL=C awk -v us="$std_us" -v dir="$std_scan" '
         FILENAME ~ /\/drop\.[^\/]*$/ {
             key = FILENAME; sub(/.*\/drop\./, "", key)
             i = index($0, ":"); drop[key us substr($0, 1, i - 1)] = 1
@@ -702,8 +706,9 @@ scan_run() {
         {
             kind = FILENAME; sub(/.*\/rec\./, "", kind)
             if ((kind us FNR) in drop) next
-            split($0, r, us)
+            n = split($0, r, us)
             print "privacy-scan: " r[3] ": " kind
+            if (r[n] != "") print "privacy-scan: " r[3] ": " kind us r[n] > (dir "/fblobs")
         }' "$@" "$std_scan"/rec.* > "$std_scan/findings.raw" ||
         std_fail "cannot report the findings"
     # Each finding once, then by path and line number.
@@ -712,14 +717,62 @@ scan_run() {
     LC_ALL=C sort -t : -k 2,2 -k 3,3n "$std_scan/findings.u" > "$std_scan/findings" ||
         std_fail "cannot report the findings"
     [ -s "$std_scan/findings" ] || return 0
-    cat "$std_scan/findings" >&2
+    if [ -n "$std_history" ] && [ -s "$std_scan/fblobs" ]; then
+        scan_commits
+        cat "$std_scan/findings.out" >&2
+    else
+        cat "$std_scan/findings" >&2
+    fi
     std_count=$(awk 'END { print NR }' "$std_scan/findings")
     std_say "refused: $std_count finding(s). Use synthetic values (CONTRIBUTING.md, Test data);" \
         "a denylist term is never shown."
+    if [ -n "$std_history" ] && [ -s "$std_scan/fblobs" ]; then
+        std_say "a PRIVACY_HISTORY_ACCEPT record of any one commit that brought in a version" \
+            "accepts that version for the kind of its record; first check that the value is synthetic."
+    fi
     if [ -n "$std_listing" ] && grep -q 'path name ' "$std_scan/findings"; then
         std_say "path name N is line N of: $std_listing"
     fi
     return 1
+}
+
+# For --history: write $std_scan/findings.out, the findings with a line under each finding in
+# file content for each version (blob) behind it. The line names, by full SHA and newest first,
+# the commits whose PRIVACY_HISTORY_ACCEPT record would accept that version: those that bring it
+# in as scan_accept reads a commit, with diff-tree. A merge brings in nothing there, and neither
+# does a ref that names a blob directly, so a version only they bring in gets a line that says so.
+# One git log pass over every ref, and only when a history scan has file findings.
+scan_commits() {
+    LC_ALL=C sort -u "$std_scan/fblobs" > "$std_scan/fblobs.u" ||
+        std_fail "cannot list the versions behind the findings"
+    git log --all --root --raw --no-abbrev --no-renames --diff-filter=ACMRT --diff-merges=off \
+        --no-show-signature --format='%x01%H' > "$std_scan/lograw" 2> /dev/null ||
+        std_fail "cannot list the commits of the history"
+    LC_ALL=C awk -v us="$std_us" '
+        FILENAME ~ /\/fblobs\.u$/ { want[substr($0, index($0, us) + 1)] = 1; next }
+        /^\001/ { sha = substr($0, 2); next }
+        /^:/ {
+            split($0, m, " ")
+            if ((m[4] in want) && !((m[4] us sha) in seen)) { seen[m[4] us sha] = 1; by[m[4]] = by[m[4]] " " sha }
+        }
+        END { for (b in want) print b us by[b] }' "$std_scan/fblobs.u" "$std_scan/lograw" \
+        > "$std_scan/bycommit" || std_fail "cannot list the commits of the history"
+    LC_ALL=C awk -v us="$std_us" '
+        FILENAME ~ /\/bycommit$/ { i = index($0, us); by[substr($0, 1, i - 1)] = substr($0, i + 1); next }
+        FILENAME ~ /\/fblobs\.u$/ { i = index($0, us); vers[substr($0, 1, i - 1)] = vers[substr($0, 1, i - 1)] us substr($0, i + 1); next }
+        {
+            print
+            if (!($0 in vers)) next
+            n = split(substr(vers[$0], 2), b, us)
+            for (j = 1; j <= n; j++) {
+                if (by[b[j]] != "")
+                    print "privacy-scan:   in version " substr(b[j], 1, 12) ", brought in by commit" by[b[j]]
+                else
+                    print "privacy-scan:   in version " substr(b[j], 1, 12) ", brought in by no commit that a" \
+                        " PRIVACY_HISTORY_ACCEPT record can name (only a merge or a ref brings it in)"
+            }
+        }' "$std_scan/bycommit" "$std_scan/fblobs.u" "$std_scan/findings" > "$std_scan/findings.out" ||
+        std_fail "cannot report the findings"
 }
 
 # Find the exempt hits of each kind found: those the kind's exempt ERE matches, and those a

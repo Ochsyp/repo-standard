@@ -2,11 +2,11 @@
 # type  profile  blob-id                                   mode    path[#block[@variant]]
 standard 1.1.0
 file    all      941c1c30e14277895654fb9805bef6308a79601c  100755  .githooks/commit-msg
-file    all      c1e58e8f2c513cde2b5f6b16c087047c8d448e93  100644  .githooks/lib.sh
+file    all      55183a4ae0664a0296c03d87dc6c743165849fba  100644  .githooks/lib.sh
 file    all      d5c698aa8c8da0560bb52304c8aafca57a0bf5c3  100755  .githooks/pre-commit
 file    all      a75b31ca1d9056f5487e50c0d1d262725236ce5f  100755  .githooks/pre-merge-commit
 file    all      56c7891c3b469719682a53fae16eca4035887aef  100755  .githooks/pre-push
-file    all      0df849eb5cbe375990b0e03f9d044e21462752b2  100755  .githooks/privacy-scan
+file    all      e55058e104edf130d880ae3c88454805cd4e81ae  100755  .githooks/privacy-scan
 file    all      0cbb587f8e8aea0fff4b1e61d129f1ccf7ebaacd  100644  .githooks/rules/base
 file    all      40ca1345fcae4b716888942e08db42edf18e5d1b  100644  .githooks/rules/disk
 file    all      a34753f7f764dd463fe795f388a243da0b1fcf91  100644  .githooks/rules/vm
@@ -33,7 +33,7 @@ file    all      1fee954a0ec0b922e65a395714d66d1b9f9b6792  100755  .github/stand
 file    all      544cd28c288b54ccfad3aea28ed81e98e5d5d06d  100755  .github/standard/tests/hooks.bats
 file    all      7d3beb2bf680a7b879863021a7c839e77f2b1dcd  100644  .github/standard/tests/lib.bash
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
-file    all      d58ba2bbeef0a5c489e0280f16c147848fec878c  100755  .github/standard/tests/privacy-scan.bats
+file    all      df54ee2da487eba8d66237476c9bd30058c753bf  100755  .github/standard/tests/privacy-scan.bats
 file    all      3e6b603f4bffb64bf1422764dbe619dcfb18af96  100755  .github/standard/tests/release-meta.bats
 file    all      ce286a83d9cbfec96e2dedd238fbe7b87d956c68  100755  .github/standard/tests/release-tools.bats
 file    all      8b54937d8ea46d0a68b6dc597ff56c2fca84528c  100755  .github/standard/tests/secret-scan.bats

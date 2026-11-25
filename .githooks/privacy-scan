@@ -7,7 +7,9 @@
 #   --message FILE|-  a commit message, a list of ref names, or a pull request's title and body
 #   --range REVS...   what the commits of REVS (git rev-list arguments) bring in: content, path
 #                     names, messages, author and committer, and annotated tag messages
-#   --history         --range over every ref, with the PRIVACY_HISTORY_ACCEPT records applied
+#   --history         --range over every ref, with the PRIVACY_HISTORY_ACCEPT records applied;
+#                     under each finding in a file, one line per version behind it names the
+#                     commits whose accept record would accept that version, by full SHA
 # It always checks the terms of every denylist (.githooks/lib.sh, deny_load), and the rule packs
 # that PRIVACY_RULES names, read from the committed .github/standard.conf with its PRIVACY_ALLOW
 # exemptions. On a PRIVACY_ALLOW line of .github/standard.conf that conf accepts, the packs skip
@@ -73,6 +75,7 @@ case $mode in
         ;;
     --range) scan_range "$@" ;;
     --history)
+        std_history=1
         scan_range --all
         scan_accept
         ;;

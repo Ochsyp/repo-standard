@@ -7,6 +7,15 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+### Added
+
+- `privacy-scan --history` names, under each finding in a file, the commits behind it: one line
+  per version of the file that holds the hit, with the full SHAs of the commits whose
+  `PRIVACY_HISTORY_ACCEPT` record would accept that version, newest first, or a line that says no
+  commit can, when only a merge or a ref brings the version in. A record for any one of them
+  accepts that version, once the value is checked as synthetic. Other scans, exit codes and the
+  finding lines are unchanged
+
 ### Changed
 
 - The README's status names 1.1.0 as published, with the seal
