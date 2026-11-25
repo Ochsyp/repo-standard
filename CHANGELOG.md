@@ -17,6 +17,11 @@ Each version is the GitHub release `vX.Y.Z`.
   commit can, and a denylist finding gets none. A record for any one of them accepts that
   version, once the value is checked as synthetic. Other scans, exit codes and the finding lines
   are unchanged
+- The seal tool's seventh check, `configured`: `.github/standard.conf` at the release's commit
+  must set `SEAL=yes`, exactly once. A release of a repository without the seal, one made before
+  its repository set `SEAL=yes`, or one whose config is missing or unreadable fails the check, so
+  `seal` refuses it and the dialog leaves **Seal** off. A later `SEAL=yes` on main does not make an
+  older release sealable. `versions` still lists every release
 
 ### Changed
 

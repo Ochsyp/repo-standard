@@ -15,6 +15,7 @@ BeforeAll {
             "check`tok`tdrafted`tdrafted by github-actions[bot]",
             "check`tok`tcommit`t0123456789ab is on main",
             "check`tok`tversion`tVERSION reads 1.1.0",
+            "check`tok`tconfigured`tSEAL=yes at the commit of v1.1.0",
             "check`tok`tverify`tthe verify run of v1.1.0 is green",
             "check`tok`tunsealed`tno seal/v1.1.0 yet",
             "fact`tcommit`t0123456789abcdef0123456789abcdef01234567",
@@ -29,7 +30,7 @@ BeforeAll {
 Describe 'ConvertFrom-SealOutput' {
     It 'reads the checks, the facts and the commits since the base' {
         $result = ConvertFrom-SealOutput -Lines (Get-GoodLine)
-        @($result.Checks).Count | Should -Be 6
+        @($result.Checks).Count | Should -Be 7
         $result.Checks[0].Name | Should -Be 'published'
         $result.Checks[0].Result | Should -Be 'ok'
         $result.Commit | Should -Be '0123456789abcdef0123456789abcdef01234567'
@@ -47,12 +48,17 @@ Describe 'ConvertFrom-SealOutput' {
 }
 
 Describe 'Test-SealReady' {
-    It 'is true only when each of the six checks is there and passed' {
+    It 'is true only when each of the seven checks is there and passed' {
         Test-SealReady -Result (ConvertFrom-SealOutput -Lines (Get-GoodLine)) | Should -BeTrue
         $failed = (Get-GoodLine) -replace "^check`tok`tverify`t.*", "check`tFAIL`tverify`tthe verify run of v1.1.0 ended with failure"
         Test-SealReady -Result (ConvertFrom-SealOutput -Lines $failed) | Should -BeFalse
         $missing = @(Get-GoodLine | Where-Object { $_ -notlike "check`tok`tunsealed*" })
         Test-SealReady -Result (ConvertFrom-SealOutput -Lines $missing) | Should -BeFalse
+        # A repository without SEAL=yes: the check fails, or an older tool did not print it.
+        $notSealed = (Get-GoodLine) -replace "^check`tok`tconfigured`t.*", "check`tFAIL`tconfigured`tthe config at v1.1.0 does not set SEAL=yes"
+        Test-SealReady -Result (ConvertFrom-SealOutput -Lines $notSealed) | Should -BeFalse
+        $noConfigured = @(Get-GoodLine | Where-Object { $_ -notlike "check`tok`tconfigured*" })
+        Test-SealReady -Result (ConvertFrom-SealOutput -Lines $noConfigured) | Should -BeFalse
         Test-SealReady -Result (ConvertFrom-SealOutput -Lines @()) | Should -BeFalse
     }
 }
@@ -106,7 +112,7 @@ Describe 'Get-SealForm and Show-SealResult' {
         $form.Tag.Pr.Text | Should -Be '#3 chore(release): 1.1.0'
         $form.Tag.Base.Text | Should -Be 'Commits since v1.0.0, newest first'
         @($form.Tag.Since.Lines).Count | Should -Be 2
-        $form.Tag.Checks.Items.Count | Should -Be 6
+        $form.Tag.Checks.Items.Count | Should -Be 7
         $form.Tag.Seal.Enabled | Should -BeTrue
         $failed = (Get-GoodLine) -replace "^check`tok`tcommit`t.*", "check`tFAIL`tcommit`tthe commit of v1.1.0 is not on main"
         Show-SealResult -Form $form -Result (ConvertFrom-SealOutput -Lines $failed)
@@ -200,7 +206,7 @@ esac
         Invoke-ReleaseCheck -Form $form -Shell $bash -Slug $slug -Versions $versions -Script $stub
         $form.Tag.Status.Text | Should -Be 'Every check passed.'
         $form.Tag.Seal.Enabled | Should -BeTrue
-        $form.Tag.Checks.Items.Count | Should -Be 6
+        $form.Tag.Checks.Items.Count | Should -Be 7
     }
 
     It 'turns an error into its status line, with Seal off, and never throws' {

@@ -14,6 +14,7 @@
 #   drafted    github-actions[bot] drafted it
 #   commit     the tag's commit is on main
 #   version    VERSION at that commit reads X.Y.Z
+#   configured .github/standard.conf at that commit sets SEAL=yes, once
 #   verify     the newest run of release.yml for that commit's release event ended in success
 #   unsealed   no seal/vX.Y.Z exists
 # and the facts: commit, pr (the pull request of the commit), base (the newest seal, else the
@@ -222,6 +223,31 @@ facts() {
     fi | tr '\t\r' '  ' | while IFS= read -r l; do printf 'fact\tsince\t%s\n' "$l"; done
 }
 
+# The check configured: .github/standard.conf at the release's commit $1 holds exactly one SEAL
+# line, and it reads SEAL=yes, so a release of a repository without the seal is never sealed. The
+# config is read as data, by its blob, and never run. Only the release's commit counts: a config
+# on main that says SEAL=yes later does not make an older release sealable.
+configured() {
+    local entry oid seals
+    # "MODE blob OID<TAB>PATH", read by its object id, since git in Git Bash may rewrite a REV:PATH.
+    entry=$(mgit ls-tree "$1" -- .github/standard.conf 2> /dev/null) || entry=''
+    oid=${entry#* blob }
+    oid=${oid%%$'\t'*}
+    if [[ $entry != *' blob '* ]] || ! mgit cat-file blob "$oid" > "$tmp/conf" 2> /dev/null; then
+        report configured FAIL "$tag has no readable .github/standard.conf"
+        return
+    fi
+    tr -d '\r' < "$tmp/conf" > "$tmp/conf.lf"
+    seals=$(grep -c '^SEAL=' "$tmp/conf.lf") || seals=0
+    if (( seals > 1 )); then
+        report configured FAIL "the config at $tag sets SEAL more than once"
+    elif grep -q -x 'SEAL=yes' "$tmp/conf.lf"; then
+        report configured ok "SEAL=yes at the commit of $tag"
+    else
+        report configured FAIL "the config at $tag does not set SEAL=yes"
+    fi
+}
+
 # Run the checks and print their lines and the facts; failed=1 when one failed.
 run_checks() {
     local state draft pre immutable author published commit run
@@ -245,6 +271,7 @@ run_checks() {
     if [[ -z $commit ]]; then
         report commit FAIL "no tag $tag"
         report version FAIL "no tag $tag"
+        report configured FAIL "no tag $tag"
         report verify FAIL "no tag $tag"
     else
         if mgit merge-base --is-ancestor "$commit" refs/remotes/origin/main 2> /dev/null; then
@@ -257,6 +284,7 @@ run_checks() {
         else
             report version FAIL "VERSION at the commit of $tag does not read $version"
         fi
+        configured "$commit"
         run=$(ghr api "repos/$repo/actions/workflows/release.yml/runs?event=release&head_sha=$commit&per_page=1" \
             --jq "$JQ_RUN" 2> /dev/null | tr -d '\r') || run=unreadable
         if [[ $run == success ]]; then report verify ok "the verify run of $tag is green"
