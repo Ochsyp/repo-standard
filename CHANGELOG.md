@@ -11,10 +11,12 @@ Each version is the GitHub release `vX.Y.Z`.
 
 - `privacy-scan --history` names, under each finding in a file, the commits behind it: one line
   per version of the file that holds the hit, with the full SHAs of the commits whose
-  `PRIVACY_HISTORY_ACCEPT` record would accept that version, newest first, or a line that says no
-  commit can, when only a merge or a ref brings the version in. A record for any one of them
-  accepts that version, once the value is checked as synthetic. Other scans, exit codes and the
-  finding lines are unchanged
+  `PRIVACY_HISTORY_ACCEPT` record would accept that version. Those that HEAD holds come first,
+  and the others are marked as outside HEAD, since the secret scan refuses a record whose commit
+  is not in the base. A version that only a merge or a ref brings in gets a line that says no
+  commit can, and a denylist finding gets none. A record for any one of them accepts that
+  version, once the value is checked as synthetic. Other scans, exit codes and the finding lines
+  are unchanged
 
 ### Changed
 

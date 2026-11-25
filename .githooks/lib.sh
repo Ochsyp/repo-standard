@@ -708,7 +708,8 @@ scan_run() {
             if ((kind us FNR) in drop) next
             n = split($0, r, us)
             print "privacy-scan: " r[3] ": " kind
-            if (r[n] != "") print "privacy-scan: " r[3] ": " kind us r[n] > (dir "/fblobs")
+            # No record accepts a denylist term, so scan_commits names no commit for one.
+            if (r[n] != "" && kind != "denylist") print "privacy-scan: " r[3] ": " kind us r[n] > (dir "/fblobs")
         }' "$@" "$std_scan"/rec.* > "$std_scan/findings.raw" ||
         std_fail "cannot report the findings"
     # Each finding once, then by path and line number.
@@ -726,9 +727,13 @@ scan_run() {
     std_count=$(awk 'END { print NR }' "$std_scan/findings")
     std_say "refused: $std_count finding(s). Use synthetic values (CONTRIBUTING.md, Test data);" \
         "a denylist term is never shown."
-    if [ -n "$std_history" ] && [ -s "$std_scan/fblobs" ]; then
+    if [ -n "$std_history" ] && [ -s "$std_scan/fblobs" ] &&
+        grep -q '^privacy-scan:   in version [0-9a-f]*, brought in \(by commit\|outside\)' \
+            "$std_scan/findings.out"; then
         std_say "a PRIVACY_HISTORY_ACCEPT record of any one commit that brought in a version" \
-            "accepts that version for the kind of its record; first check that the value is synthetic."
+            "accepts that version for the kind of its record. First check that the value is" \
+            "synthetic, and pick a commit that the base branch holds: the secret scan refuses a" \
+            "record whose commit is not an ancestor of the base."
     fi
     if [ -n "$std_listing" ] && grep -q 'path name ' "$std_scan/findings"; then
         std_say "path name N is line N of: $std_listing"
@@ -737,39 +742,52 @@ scan_run() {
 }
 
 # For --history: write $std_scan/findings.out, the findings with a line under each finding in
-# file content for each version (blob) behind it. The line names, by full SHA and newest first,
+# file content for each version (blob) behind it. The line names, by full SHA in git log order,
 # the commits whose PRIVACY_HISTORY_ACCEPT record would accept that version: those that bring it
-# in as scan_accept reads a commit, with diff-tree. A merge brings in nothing there, and neither
-# does a ref that names a blob directly, so a version only they bring in gets a line that says so.
-# One git log pass over every ref, and only when a history scan has file findings.
+# in as scan_accept reads a commit, with diff-tree. Those that HEAD holds come first; the others
+# are marked as outside HEAD, since the secret scan accepts only a record whose commit the base
+# holds. A merge brings in nothing for diff-tree, and neither does a ref that names a blob
+# directly, so a version only they bring in gets a line that says so. One git log pass over every
+# ref, and only when a history scan has findings in file content.
 scan_commits() {
     LC_ALL=C sort -u "$std_scan/fblobs" > "$std_scan/fblobs.u" ||
         std_fail "cannot list the versions behind the findings"
     git log --all --root --raw --no-abbrev --no-renames --diff-filter=ACMRT --diff-merges=off \
         --no-show-signature --format='%x01%H' > "$std_scan/lograw" 2> /dev/null ||
         std_fail "cannot list the commits of the history"
+    git rev-list HEAD > "$std_scan/headrevs" 2> /dev/null || : > "$std_scan/headrevs"
     LC_ALL=C awk -v us="$std_us" '
         FILENAME ~ /\/fblobs\.u$/ { want[substr($0, index($0, us) + 1)] = 1; next }
+        FILENAME ~ /\/headrevs$/ { head[$0] = 1; next }
         /^\001/ { sha = substr($0, 2); next }
         /^:/ {
             split($0, m, " ")
-            if ((m[4] in want) && !((m[4] us sha) in seen)) { seen[m[4] us sha] = 1; by[m[4]] = by[m[4]] " " sha }
+            if (!(m[4] in want) || (m[4] us sha) in seen) next
+            seen[m[4] us sha] = 1
+            if (sha in head) inh[m[4]] = inh[m[4]] " " sha
+            else out[m[4]] = out[m[4]] " " sha
         }
-        END { for (b in want) print b us by[b] }' "$std_scan/fblobs.u" "$std_scan/lograw" \
-        > "$std_scan/bycommit" || std_fail "cannot list the commits of the history"
+        END { for (b in want) print b us inh[b] us out[b] }' "$std_scan/fblobs.u" \
+        "$std_scan/headrevs" "$std_scan/lograw" > "$std_scan/bycommit" ||
+        std_fail "cannot list the commits of the history"
     LC_ALL=C awk -v us="$std_us" '
-        FILENAME ~ /\/bycommit$/ { i = index($0, us); by[substr($0, 1, i - 1)] = substr($0, i + 1); next }
+        FILENAME ~ /\/bycommit$/ { split($0, f, us); inh[f[1]] = f[2]; out[f[1]] = f[3]; next }
         FILENAME ~ /\/fblobs\.u$/ { i = index($0, us); vers[substr($0, 1, i - 1)] = vers[substr($0, 1, i - 1)] us substr($0, i + 1); next }
         {
             print
             if (!($0 in vers)) next
             n = split(substr(vers[$0], 2), b, us)
             for (j = 1; j <= n; j++) {
-                if (by[b[j]] != "")
-                    print "privacy-scan:   in version " substr(b[j], 1, 12) ", brought in by commit" by[b[j]]
+                v = "privacy-scan:   in version " substr(b[j], 1, 12) ", brought in "
+                if (inh[b[j]] != "" && out[b[j]] != "")
+                    print v "by commit" inh[b[j]] ", and outside HEAD by commit" out[b[j]]
+                else if (inh[b[j]] != "")
+                    print v "by commit" inh[b[j]]
+                else if (out[b[j]] != "")
+                    print v "outside HEAD only, by commit" out[b[j]]
                 else
-                    print "privacy-scan:   in version " substr(b[j], 1, 12) ", brought in by no commit that a" \
-                        " PRIVACY_HISTORY_ACCEPT record can name (only a merge or a ref brings it in)"
+                    print v "by no commit that a PRIVACY_HISTORY_ACCEPT record can name" \
+                        " (only a merge or a ref brings it in)"
             }
         }' "$std_scan/bycommit" "$std_scan/fblobs.u" "$std_scan/findings" > "$std_scan/findings.out" ||
         std_fail "cannot report the findings"

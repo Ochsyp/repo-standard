@@ -339,6 +339,8 @@ synthetic() {
     scan --history
     [ "$status" -eq 1 ] || { printf 'exit %s\n' "$status" >&2; return 1; }
     [[ $stderr == *": denylist"* ]]
+    # No record can accept a denylist term, so the scan names no commit for one.
+    [[ $stderr != *"brought in"* && $stderr != *"PRIVACY_HISTORY_ACCEPT"* ]]
 }
 
 @test "a PRIVACY_ALLOW line for the empty path does not exempt a blob that a tag names directly" {
@@ -524,6 +526,30 @@ commit_off() {
     commit_config PRIVACY_RULES=base "${accept[@]}"
     scan --history
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+}
+
+@test "--history names the commits in HEAD first, and marks those outside it, which secret-scan refuses" {
+    local t1 t2 m1 v1 v2
+    make_repo
+    git -C "$REPO" switch -q -c feat/example
+    commit_config PRIVACY_RULES=base
+    # A topic branch brings in a version, and a squash brings the same version into HEAD.
+    git -C "$REPO" switch -q -c feat/topic
+    stage notes.txt "$(printf 'mail someone@%s' example.de)"
+    t1=$(commit_off "docs: notes on the topic")
+    printf 'more\n' >> "$REPO/notes.txt"
+    git -C "$REPO" add notes.txt
+    t2=$(commit_off "docs: more notes on the topic")
+    git -C "$REPO" switch -q feat/example
+    stage notes.txt "$(printf 'mail someone@%s' example.de)"
+    m1=$(commit_off "docs: notes")
+    v1=$(git -C "$REPO" rev-parse "$m1:notes.txt")
+    v2=$(git -C "$REPO" rev-parse "$t2:notes.txt")
+    scan --history
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"privacy-scan:   in version ${v1:0:12}, brought in by commit $m1, and outside HEAD by commit $t1"$'\n'* ]]
+    [[ $stderr == *"privacy-scan:   in version ${v2:0:12}, brought in outside HEAD only, by commit $t2"$'\n'* ]]
+    [[ $stderr == *"pick a commit that the base branch holds"* ]]
 }
 
 @test "--history names commits under a hidden path name, and shows neither the name nor a value" {
