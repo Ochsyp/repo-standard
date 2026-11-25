@@ -17,6 +17,7 @@
 # the release adoption. Under SEAL=yes a block's seal variant replaces the block of its name, and
 # a block that exists only as a seal variant, such as SECURITY.md's sealed-releases, needs its
 # markers in the file first. --init adopts a repository that has a config and no MANIFEST yet.
+# It refuses a config that is not committed or differs from HEAD's: the hooks read it from HEAD.
 # CONTRIBUTING.md and SECURITY.md come from templates/ where DIR has none. A block whose markers
 # a file lacks is added at the head of a configuration file, or at the end of a document. A new
 # .github/dependabot.yml gets the github-actions entry at limit 0. Last, it prints the pull
@@ -102,6 +103,25 @@ asset=$(git hash-object --no-filters "$tmp/asset/MANIFEST")
 dir=$(git -C "$to" rev-parse --show-toplevel 2> /dev/null) || refuse "the target is not a git work tree"
 [[ -f $dir/.github/standard.conf ]] ||
     refuse "the target has no .github/standard.conf; write it from templates/standard.conf first"
+# The hooks and privacy-scan read the config from HEAD, and before its first commit they run no
+# rule pack, so an adoption needs it committed as it stands. HEAD is read without a REV:PATH
+# argument, which Git Bash may rewrite.
+if (( init )); then
+    entry=''
+    if git -C "$dir" rev-parse --quiet --verify HEAD > /dev/null; then
+        entry=$(git -C "$dir" ls-tree HEAD -- .github/standard.conf) ||
+            fail "cannot read the target's HEAD"
+    fi
+    [[ $entry == *' blob '* ]] ||
+        refuse "the target's .github/standard.conf is not committed; commit it on its own first," \
+            "since the hooks and privacy-scan read it from HEAD"
+    differs=0
+    git -C "$dir" diff --quiet HEAD -- .github/standard.conf || differs=$?
+    (( differs != 1 )) ||
+        refuse "the target's .github/standard.conf differs from the committed one; commit it on its" \
+            "own first"
+    (( differs == 0 )) || fail "cannot compare the target's .github/standard.conf with HEAD's"
+fi
 conf() {
     sh "$src/.github/standard/bin/conf" --get "$1" "$dir/.github/standard.conf" ||
         refuse "cannot read $1 from the target's .github/standard.conf"

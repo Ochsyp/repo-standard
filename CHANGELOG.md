@@ -10,6 +10,9 @@ Each version is the GitHub release `vX.Y.Z`.
 ### Changed
 
 - The README's status names 1.2.0 as published, with what it adds
+- `tools/sync --init` refuses a target whose `.github/standard.conf` is not committed, or differs
+  from the committed one, since the hooks and `privacy-scan` read the config from HEAD. Commit
+  the config on its own before the adoption's sync
 
 ## [1.2.0] - 2026-11-25
 
