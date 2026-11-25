@@ -7,6 +7,10 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+### Changed
+
+- The README's status names 1.2.0 as published, with what it adds
+
 ## [1.2.0] - 2026-11-25
 
 ### Added
