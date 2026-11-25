@@ -54,7 +54,8 @@ Describe 'Test-SealReady' {
         Test-SealReady -Result (ConvertFrom-SealOutput -Lines $failed) | Should -BeFalse
         $missing = @(Get-GoodLine | Where-Object { $_ -notlike "check`tok`tunsealed*" })
         Test-SealReady -Result (ConvertFrom-SealOutput -Lines $missing) | Should -BeFalse
-        # A repository without SEAL=yes: the check fails, or an older tool did not print it.
+        # Without SEAL=yes the configured check fails. An older tool prints no configured check
+        # at all, which is not ready either.
         $notSealed = (Get-GoodLine) -replace "^check`tok`tconfigured`t.*", "check`tFAIL`tconfigured`tthe config at v1.1.0 does not set SEAL=yes"
         Test-SealReady -Result (ConvertFrom-SealOutput -Lines $notSealed) | Should -BeFalse
         $noConfigured = @(Get-GoodLine | Where-Object { $_ -notlike "check`tok`tconfigured*" })
@@ -162,8 +163,8 @@ exit 3
 
 Describe 'Invoke-ReleaseCheck and Invoke-ReleaseSeal' {
     BeforeAll {
-        # A stub of release-seal that prints the files beside it: check.out for check, and for
-        # seal seal.out, seal.err on stderr and the exit code in seal.rc.
+        # A stub of release-seal that answers from the files beside it. check prints check.out;
+        # seal prints seal.out, seal.err on stderr, and exits with the code in seal.rc.
         $stubDir = Join-Path -Path $env:TEMP -ChildPath ('release-seal-test-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $stubDir | Out-Null
         $stub = Join-Path -Path $stubDir -ChildPath 'release-seal'

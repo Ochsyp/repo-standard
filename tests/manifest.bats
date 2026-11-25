@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 # manifest.bats of repo-standard: tools/manifest over a small source repository (profiles,
 # modes, block ids, what stays out, --check and --rev), over this repository, the scratch
-# consumer of tools/consumer-suite, and lint of the repository's own scripts in tools/, ci/ and
-# tests/.
+# consumer of tools/consumer-suite, and lint of the repository's own scripts in tools/, ci/,
+# tests/ and templates/.
 
 # The sh -c scripts are single-quoted, and bats runs each test in a subshell, both on purpose.
 # shellcheck disable=SC2016,SC2030,SC2031
@@ -155,8 +155,8 @@ manifest_matches_but_workflows() {
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $output == "consumer-suite: "*" file(s) and "*" block(s) of standard "* ]]
     git -C "$dest" ls-files -s > "$BATS_TEST_TMPDIR/files"
-    # Each file entry with the blob and the mode the consumer's MANIFEST names, which equals the
-    # one rebuilt from this repository's index.
+    # The consumer's MANIFEST equals the one rebuilt from this repository's index. Each file it
+    # names has that blob and that mode in the consumer.
     run sh -c 'cd "$1" && exec sh tools/manifest --print' sh "$REPO_ROOT"
     [ "$status" -eq 0 ]
     [ "$output" = "$(cat "$dest/.github/standard/MANIFEST")" ]
@@ -165,7 +165,8 @@ manifest_matches_but_workflows() {
         grep -q -x -F "$mode $oid 0"$'\t'"$path" "$BATS_TEST_TMPDIR/files" ||
             { printf '%s is not %s %s in the consumer\n' "$path" "$mode" "$oid" >&2; return 1; }
     done < "$dest/.github/standard/MANIFEST"
-    # Nothing that only repo-standard holds; VERSION and CHANGELOG.md are the consumer's own.
+    # The consumer holds nothing that only repo-standard holds. Its VERSION and CHANGELOG.md are
+    # its own.
     run grep -E -e $'\t(blocks|tools|tests|config|templates)/' \
         -e $'\t(README\\.md|\\.github/workflows/bootstrap\\.yml)$' "$BATS_TEST_TMPDIR/files"
     [ "$status" -eq 1 ]
@@ -174,7 +175,8 @@ manifest_matches_but_workflows() {
     run bash -c 'cd "$1" && git tag --list "v*" | bash .github/standard/bin/release-meta check' sh "$dest"
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
     [[ $output == *"state=unreleased"* ]]
-    # The blocks between their markers, ci/test executable, ci/test.ps1 checked out with CRLF.
+    # The blocks sit between their markers, ci/test is executable, and ci/test.ps1 is checked out
+    # with CRLF.
     [[ $(head -n 1 "$dest/.gitattributes") == "# standard:begin gitattributes" ]]
     grep -q -x -F '<!-- standard:begin reporting -->' "$dest/SECURITY.md"
     [[ $(git -C "$dest" ls-files -s -- ci/test) == 100755* ]]
@@ -220,7 +222,8 @@ run_consumer_suite() {
     run_consumer_suite "$pub"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $output == *", public shape" ]]
-    # public: LICENSE (mit), the release workflow and the releasing block, no private block.
+    # The public shape has LICENSE (mit), the release workflow and the releasing block, and no
+    # private block.
     [ "$(git -C "$pub" rev-parse :LICENSE)" = "$(git -C "$REPO" rev-parse :LICENSE)" ]
     [ "$(git -C "$pub" rev-parse :.github/workflows/release.yml)" = \
         "$(git -C "$REPO" rev-parse :.github/workflows/release.yml)" ]
@@ -230,9 +233,9 @@ run_consumer_suite() {
     run_consumer_suite --shape private "$priv"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $output == *", private shape" ]]
-    # private: no LICENSE, release workflows of its own, the private block, no releasing block.
-    # Its own release.yml and image.yml are workflows the general rules accept, and image.yml is
-    # callable as ci.yml calls it.
+    # The private shape has no LICENSE, release workflows of its own, the private block, and no
+    # releasing block. Its release.yml and image.yml pass the general workflow rules, and
+    # image.yml accepts the call that ci.yml makes.
     [ ! -e "$priv/LICENSE" ]
     [ "$(git -C "$priv" rev-parse :.github/workflows/release.yml)" != \
         "$(git -C "$REPO" rev-parse :.github/workflows/release.yml)" ]
@@ -264,8 +267,8 @@ run_consumer_suite() {
 
 @test "tools/consumer-suite stops when tools/manifest cannot rebuild the MANIFEST, and keeps DEST in place" {
     source_with_manifest
-    # A relative DEST under an exported CDPATH, and MSYS_NO_PATHCONV, which in Git Bash keeps the
-    # paths git gets from being converted.
+    # A relative DEST works under an exported CDPATH. MSYS_NO_PATHCONV keeps Git Bash from
+    # converting the paths git gets.
     run --separate-stderr sh -c 'cd "$1" && CDPATH=. MSYS_NO_PATHCONV=1 exec sh tools/consumer-suite rel' \
         sh "$REPO"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }

@@ -61,4 +61,4 @@ block   private  df0db443e23ba5a3bbbbd475751d06f204556a9c  -       SECURITY.md#a
 block   public   ae05ad33b7e1ea381bde965837c6db0eb871cce3  -       SECURITY.md#automated-checks@public
 block   private  c828e6428c3280d2da931787c7880ebadfd14b54  -       SECURITY.md#reporting@private
 block   public   cec24782757f5de75882626848f6ccf75c18a9cc  -       SECURITY.md#reporting@public
-block   seal     0e5dd38c50a161dea0dc5f7330c672b6a6768247  -       SECURITY.md#sealed-releases@seal
+block   seal     774e2312ad2aa8658109db866b590b8f41a5bf94  -       SECURITY.md#sealed-releases@seal

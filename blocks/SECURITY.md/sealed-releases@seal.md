@@ -4,8 +4,9 @@ Hosts install a release of this repository only when the maintainer has sealed i
 annotated tag `seal/vX.Y.Z` with the message `<repository> vX.Y.Z`, signed with the
 maintainer's offline SSH key, on the commit of the published release `vX.Y.Z`. The maintainer
 seals after the publish, with a seal tool that first checks the release: published, immutable,
-neither a draft nor a pre-release, drafted by GitHub Actions, its commit on `main`, and its
-`verify` run green.
+neither a draft nor a pre-release, drafted by GitHub Actions, its commit on `main`, its `verify`
+run green, and `SEAL=yes` set once in `.github/standard.conf` at that commit. The tool refuses a
+release made before the repository set `SEAL=yes`.
 
 A host checks the seal with `git verify-tag` against its own root-owned list of allowed signers.
 It also checks the seal's message, that the seal and `vX.Y.Z` name the same commit, that this

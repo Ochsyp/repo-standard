@@ -1,11 +1,11 @@
 #!/bin/sh
-# tools/consumer-suite of repo-standard: builds a scratch consumer from what the MANIFEST vendors,
-# so that CI runs the standard's suites where only the vendored files exist, as in every
-# consumer. A test that needs a file only repo-standard holds, such as blocks/ or tools/, then
-# fails before a release. It runs here only; it is not vendored.
+# tools/consumer-suite of repo-standard: builds a scratch consumer from what the MANIFEST vendors.
+# CI runs the standard's suites there, where only the vendored files exist, as in every consumer.
+# A test that needs a file only repo-standard holds, such as blocks/ or tools/, then fails before
+# a release. It runs here only; it is not vendored.
 #   tools/consumer-suite [--rev REV] [--shape public|private] DEST
-# It rebuilds the MANIFEST from the index, or from the commit REV, with tools/manifest --print, so
-# the consumer holds the files as the next release vendors them, also where the committed
+# It rebuilds the MANIFEST from the index, or from the commit REV, with tools/manifest --print.
+# So the consumer holds the files as the next release vendors them, even where the committed
 # MANIFEST lags: a Dependabot pull request moves a workflow but cannot rebuild the MANIFEST. It
 # builds the repository DEST, which must be missing or empty. The shape picks the consumer's
 # config and what the MANIFEST gives it, as standard-check selects it:
@@ -15,16 +15,16 @@
 #            private; release.yml and image.yml are the consumer's own, as under legacy (small
 #            workflows that the general rules accept, image.yml callable as ci.yml calls it),
 #            and no release block.
-# Each file entry is written from the blob the entry names, with the entry's mode, and each block
-# between its markers in its target file. DEST also holds the MANIFEST, the shape's
-# .github/standard.conf (PRIVACY_RULES=base), a VERSION and a CHANGELOG.md of its own (its link
-# names GITHUB_REPOSITORY when that is set, as release-meta requires), a ci/test and a
-# ci/test.ps1, and docs/fstab.example, a file of the consumer's own that only the disk pack
-# reports. They are committed once in a
-# source repository and cloned into DEST, so the work tree has the line ends of a checkout:
-# ci/test.ps1 gets CRLF. git runs without the global and the system config and without a
-# template, so no hook, identity or setting of the machine takes part, and it gets native paths,
-# so MSYS_NO_PATHCONV does not move the clone. Then run the suites there:
+# Each file entry is written from the blob the entry names, with the entry's mode. Each block is
+# written between its markers in its target file. DEST also holds the MANIFEST and the shape's
+# .github/standard.conf (PRIVACY_RULES=base). It holds a VERSION and a CHANGELOG.md of its own,
+# whose link names GITHUB_REPOSITORY when that is set, as release-meta requires. It holds a
+# ci/test, a ci/test.ps1, and docs/fstab.example, a file of the consumer's own that only the disk
+# pack reports. These files are committed once in a source repository and cloned into DEST, so
+# the work tree has the line ends of a checkout: ci/test.ps1 gets CRLF. git runs without the
+# global and the system config and without a template, so no hook, identity or setting of the
+# machine takes part. git gets native paths, so MSYS_NO_PATHCONV does not move the clone. Then
+# run the suites there:
 #   bats DEST/.github/standard/tests/
 set -eu
 
@@ -212,8 +212,8 @@ cp "$tmp/manifest" "$src/.github/standard/MANIFEST"
 sh "$src/.github/standard/bin/conf" --check "$src/.github/standard.conf" ||
     fail "the consumer's config does not parse"
 
-# A VERSION and a CHANGELOG.md of the consumer's own, which release-meta accepts: no release
-# yet, and a link that names the repository of the run, as release-meta holds the links to it.
+# A VERSION and a CHANGELOG.md of the consumer's own that release-meta accepts: no release yet,
+# and a link that names the repository of the run, since release-meta requires the links to name it.
 printf '0.1.0-dev\n' > "$src/VERSION"
 {
     printf '%s\n' '# Changelog' '' \

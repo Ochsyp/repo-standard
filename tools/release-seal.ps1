@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-The dialog of the seal tool (D1 = B): shows a published release of a SEAL=yes repository with
+The dialog of the seal tool: shows a published release of a SEAL=yes repository with
 the checks of release-seal, and seals it on a click on Seal.
 
 .DESCRIPTION
@@ -10,9 +10,9 @@ under Windows PowerShell 5.1 with a hidden window:
     powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass
         -File <folder>\release-seal.ps1 -Repo OWNER/NAME
 It runs release-seal in Git for Windows' bash with no console window: versions for the version
-picker, check for the facts and checks of the version picked, and seal after a click on Seal,
-which is enabled only when every check passed and is never the default button. With -Askpass it
-is the passphrase dialog that release-seal-askpass starts for ssh-keygen: it prints the
+picker, check for the facts and checks of the version picked, and seal after a click on Seal.
+Seal is enabled only when every check passed, and it is never the default button. With -Askpass
+it is the passphrase dialog that release-seal-askpass starts for ssh-keygen: it prints the
 passphrase on stdout and nothing else, or exits 1 on Cancel. It never shows, logs or keeps the
 passphrase. Exit 0 sealed; 1 not sealed; 2 the dialog cannot run.
 #>

@@ -1,15 +1,15 @@
 #!/bin/bash
-# tools/release-seal of repo-standard: the seal of D1 = B. It checks a published release of a
-# repository whose hosts install sealed releases only (SEAL=yes) and, on seal, signs and pushes
-# its seal: the annotated tag seal/vX.Y.Z with the message "<name> vX.Y.Z" on the release's
-# commit, signed with the maintainer's offline SSH key. It is released as an asset of
+# tools/release-seal of repo-standard: the seal tool. It checks a published release of a
+# repository whose hosts install sealed releases only (SEAL=yes). On seal, it signs and pushes the
+# release's seal: the annotated tag seal/vX.Y.Z on the release's commit, with the message
+# "<name> vX.Y.Z", signed with the maintainer's offline SSH key. It is released as an asset of
 # repo-standard and runs outside every clone, from the dialog release-seal.ps1 or a shell:
 #   release-seal versions --repo OWNER/NAME [--home DIR]
 #   release-seal check --repo OWNER/NAME --version X.Y.Z [--home DIR]
 #   release-seal seal --repo OWNER/NAME --version X.Y.Z [--home DIR]
-# versions prints "vX.Y.Z TAB sealed|unsealed" for the published releases that are not
-# pre-releases, newest first. check prints TAB-separated lines, "check ok|FAIL NAME REASON" and
-# "fact NAME VALUE", and exits 0 only when every check passed:
+# versions prints "vX.Y.Z TAB sealed|unsealed" for each published release that is not a
+# pre-release, newest first. check prints TAB-separated lines, "check ok|FAIL NAME REASON" and
+# "fact NAME VALUE". It exits 0 only when every check passed:
 #   published  the release is published and immutable, neither a draft nor a pre-release
 #   drafted    github-actions[bot] drafted it
 #   commit     the tag's commit is on main
@@ -17,20 +17,22 @@
 #   configured .github/standard.conf at that commit sets SEAL=yes, once
 #   verify     the newest run of release.yml for that commit's release event ended in success
 #   unsealed   no seal/vX.Y.Z exists
-# and the facts: commit, pr (the pull request of the commit), base (the newest seal, else the
-# newest release tag, of a lower version) and one "since" line per commit from base to the
-# release, newest first. seal runs the checks again and, when all pass, signs the seal with git
-# tag -s (gpg.format=ssh, the key SIGNING_KEY names, no agent), asking the key's passphrase only
-# through SSH_ASKPASS (by default release-seal-askpass beside this file) with
-# SSH_ASKPASS_REQUIRE=force; verifies it for the principal maintainer against ALLOWED_SIGNERS;
-# pushes exactly refs/tags/seal/vX.Y.Z without force; and reads it back from the remote. The tag
-# carries git's user.name and user.email as its tagger, and nothing else of this machine.
-# Its home (--home, else $RELEASE_SEAL_HOME, else the folder of this file) lies outside every git
-# work tree and holds "config", lines SIGNING_KEY=<private key file>, ALLOWED_SIGNERS=<file> and
-# optionally GIT_BASE=<URL> (https://github.com by default), and "mirrors/", the bare mirrors it
-# fetches into: tags without force, so a tag that moved stops it, and no hook runs there. It never
-# runs a file of a repository, and gh only reads. Exit 0; 1 a check failed or the seal was
-# refused; 2 a step that cannot run; 64 usage.
+# The facts are: commit; pr, the pull request of the commit; base, the newest seal of a lower
+# version, else the newest release tag of a lower version; and one "since" line per commit from
+# base to the release, newest first.
+# seal runs the checks again. When all pass, it signs the seal with git tag -s (gpg.format=ssh,
+# the key SIGNING_KEY names, no agent). It asks for the key's passphrase only through SSH_ASKPASS
+# (by default release-seal-askpass beside this file), with SSH_ASKPASS_REQUIRE=force. It then
+# verifies the seal for the principal maintainer against ALLOWED_SIGNERS, pushes exactly
+# refs/tags/seal/vX.Y.Z without force, and reads it back from the remote. The tag carries git's
+# user.name and user.email as its tagger, and nothing else of this machine.
+# Its home is --home, else $RELEASE_SEAL_HOME, else the folder of this file. The home must lie
+# outside every git work tree. It holds "config" and "mirrors/". "config" has the lines
+# SIGNING_KEY=<private key file>, ALLOWED_SIGNERS=<file> and optionally GIT_BASE=<URL>
+# (https://github.com by default). "mirrors/" holds the bare mirrors it fetches into. It fetches
+# tags without force, so a tag that moved stops it, and no hook runs there. It never runs a file
+# of a repository, and gh only reads.
+# Exit 0 on success; 1 a check failed or the seal was refused; 2 a step that cannot run; 64 usage.
 
 # The gh calls, shared with tests/release-seal.bats, which sources this file with SEAL_LIB=1.
 JQ_RELEASE='[.draft, .prerelease, (.immutable // false), (.author.login // ""), (.published_at // "")] | @tsv'
@@ -194,7 +196,8 @@ report() {
     [[ $2 == ok ]] || failed=1
 }
 
-# The newest tag PREFIX X.Y.Z ($1 is seal/v or v) of the mirror with X.Y.Z below the version.
+# Print the mirror's newest tag $1X.Y.Z ($1 is seal/v or v) whose X.Y.Z is below the version;
+# nothing when there is none.
 below() {
     local t v best=''
     while IFS= read -r t; do
@@ -224,9 +227,9 @@ facts() {
 }
 
 # The check configured: .github/standard.conf at the release's commit $1 holds exactly one SEAL
-# line, and it reads SEAL=yes, so a release of a repository without the seal is never sealed. The
-# config is read as data, by its blob, and never run. Only the release's commit counts: a config
-# on main that says SEAL=yes later does not make an older release sealable.
+# line, SEAL=yes, so a release of a repository without the seal is never sealed. The config is
+# read as data, by its blob, and never run. A later SEAL=yes on main does not make an older
+# release sealable.
 configured() {
     local entry oid seals
     # "MODE blob OID<TAB>PATH", read by its object id, since git in Git Bash may rewrite a REV:PATH.
@@ -304,7 +307,7 @@ cat "$tmp/checks"
 (( failed == 0 )) || exit 1
 [[ $command == seal ]] || exit 0
 
-# Sign the seal in the mirror, the passphrase through the dialog only.
+# Sign the seal in the mirror. The passphrase comes through the dialog only.
 mgit var GIT_COMMITTER_IDENT > /dev/null 2>&1 ||
     fail "git has no user.name and user.email for the seal's tagger"
 askpass=${SSH_ASKPASS:-$here/release-seal-askpass}

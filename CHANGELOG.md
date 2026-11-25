@@ -46,6 +46,9 @@ Each version is the GitHub release `vX.Y.Z`.
   merges. The block `guard-rails@public` says that the ruleset blocks direct pushes and the merge
   of a pull request whose `all-passed` or `scan` check failed, without the wait for an update.
   No command, check or exit code changes
+- Plain writing of repo-standard's own text: README, CONTRIBUTING and SECURITY outside the blocks,
+  and the comments in `tools/`, `ci/` and `tests/`. The block `SECURITY.md#sealed-releases@seal`
+  also names the seal tool's check that the config at the release's commit sets `SEAL=yes`
 
 ## [1.1.0] - 2026-11-24
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 # templates.bats of repo-standard: the starters in templates/ that an adoption copies and fills
 # in. Each parses or passes its checker: the config through conf, CHANGELOG.md through
-# release-meta, CONTRIBUTING.md and SECURITY.md hold the markers of every block of blocks/ in
-# order and their own sections, tests/helpers.bash sources the standard's lib.bash, and each ci/
+# release-meta. CONTRIBUTING.md and SECURITY.md hold the markers of every block of blocks/ in
+# order, and their own sections. tests/helpers.bash sources the standard's lib.bash. Each ci/
 # starter passes its shell's syntax check and is stored with the mode it needs. sync.bats builds a
 # consumer from them with tools/sync --init.
 

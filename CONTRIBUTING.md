@@ -78,7 +78,7 @@ URL. Anywhere else, such as a clone made from a local path, turn them on once af
   `powershell.exe -NoProfile -File ci/test.ps1`.
 - CI runs `standard` (every suite of the standard on Linux), `test` (Windows: `ci/test`, then
   `ci/test.ps1`: the smoke test of the pinned PowerShell modules and the Pester tests of the seal
-  dialog), `system` (Linux: the scratch consumers, lint included) and `hooks-windows`, and fails
+  dialog), `system` (Linux: the scratch consumers, lint included) and `hooks-windows`. It fails
   on any skipped test. Locally a test may skip only for a missing tool, such as actionlint.
 
 ## Test data
@@ -132,15 +132,19 @@ delete a release.
 
 ## Release contract
 
-A release `vX.Y.Z` holds `repo-standard-X.Y.Z.tar.gz`, the tree at the tag with the manifest
-`repo-standard-release.json` added; the `MANIFEST` asset, byte for byte the
-`.github/standard/MANIFEST` of the tag; the seal tool's `release-seal`, `release-seal-askpass` and
-`release-seal.ps1`, each byte for byte its file in `tools/` of the archive; and `SHA256SUMS`.
+A release `vX.Y.Z` holds:
+- `repo-standard-X.Y.Z.tar.gz`, the tree at the tag with the manifest
+  `repo-standard-release.json` added;
+- the `MANIFEST` asset, byte for byte the `.github/standard/MANIFEST` of the tag;
+- the seal tool's `release-seal`, `release-seal-askpass` and `release-seal.ps1`, each byte for
+  byte its file in `tools/` of the archive;
+- `SHA256SUMS`.
+
 `tools/sync` and `tools/status` trust a release only when it is published and immutable, and
 compare each MANIFEST with its asset.
 
-The seal tool of D1 = B runs on the maintainer's Windows PC, outside every clone, and needs Git
-for Windows (bash, git, ssh-keygen) and a logged-in `gh`. The managing session installs or
+The seal tool runs on the maintainer's Windows PC, outside every clone. It needs Git for Windows
+(bash, git, ssh-keygen) and a logged-in `gh`. The managing session installs or
 updates it only from a published, immutable release and only after the maintainer's OK:
 
 1. `gh release download vX.Y.Z -R OWNER/repo-standard --pattern 'release-seal*' --dir FOLDER`,
