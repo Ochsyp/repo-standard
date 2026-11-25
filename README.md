@@ -42,8 +42,9 @@ edits the copies. `.github/standard/MANIFEST` lists them.
 
 Versions 1.0.0, 1.0.1, 1.1.0 and 1.2.0 are published. 1.1.0 brings the seal: the key `SEAL`, the
 seal blocks, the seal tool and the seal check of `tools/status`. 1.2.0 adds the seal tool's check
-that a repository's config sets `SEAL=yes`, names the commits behind each finding of a history
-scan, and puts the shared texts and comments in plain words.
+that a repository's config sets `SEAL=yes` and the commits behind each finding of a history scan.
+It exempts a hyphenated host-name label only after `.local`, and puts the shared texts and
+comments in plain words.
 
 ## Checks
 
