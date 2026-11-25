@@ -142,6 +142,7 @@ block_of() {
     run_sync --init --to "$TGT"
     [ "$status" -eq 1 ]
     [[ $stderr == *"differs from the committed one"* ]]
+    [ ! -e "$TGT/.githooks" ] && [ ! -e "$TGT/.github/standard/MANIFEST" ]
     # Once committed, the adoption runs.
     git -C "$TGT" -c core.hooksPath=no-hooks commit -q -m "chore: weekly CI"
     run_sync --init --to "$TGT"
