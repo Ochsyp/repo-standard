@@ -34,7 +34,7 @@ file    all      b89d28c2dfa1f6459f51bb6605109206446ad400  100755  .github/stand
 file    all      5b922b9bbc0b43ce419575826a09b4324e58b74b  100644  .github/standard/tests/lib.bash
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
 file    all      d9668dee2515e2d650d6cef7041fba4ecd99640c  100755  .github/standard/tests/privacy-scan.bats
-file    all      14a623998b2ea0a27e51f3108fe66c58a674d2a2  100755  .github/standard/tests/release-meta.bats
+file    all      06ff91c69b2bf5ef4a12684dbf74c54305cc9cf9  100755  .github/standard/tests/release-meta.bats
 file    all      ce286a83d9cbfec96e2dedd238fbe7b87d956c68  100755  .github/standard/tests/release-tools.bats
 file    all      740269bdf3d9ac8a9879f435496d613eab940b8d  100755  .github/standard/tests/secret-scan.bats
 file    all      d9451228eb2ab3bc8c37109d2c93b4ea9cbdba70  100755  .github/standard/tests/standard-check.bats
