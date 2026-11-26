@@ -5,8 +5,8 @@ the checks of release-seal, and seals it on a click on Seal.
 
 .DESCRIPTION
 release-seal.ps1 of repo-standard, released as an asset beside release-seal and
-release-seal-askpass and installed with them outside every clone. A desktop shortcut starts it
-under Windows PowerShell 5.1 with a hidden window:
+release-seal-askpass and installed with them outside every clone. A shortcut in that install
+folder starts it under Windows PowerShell 5.1 with a hidden window:
     powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass
         -File <folder>\release-seal.ps1 -Repo OWNER/NAME
 It runs release-seal in Git for Windows' bash with no console window: versions for the version

@@ -29,7 +29,6 @@ setup() {
     cp "$REPO_ROOT/.github/standard/actions.allow" "$SRC/.github/standard/actions.allow"
     cp "$REPO_ROOT/.github/standard/bin/"* "$SRC/.github/standard/bin/"
     cp "$REPO_ROOT/.github/workflows/"*.yml "$SRC/.github/workflows/"
-    printf 'example-private\n' > "$SRC/config/private-names"
 }
 
 # The name of the gh stub's reply file for the call ARGS, as stub-bin/gh builds it.
@@ -126,13 +125,12 @@ has_line() {
 
 @test "an adopted repository with every setting right is ok in every per-repository check" {
     repo_ok example
-    run_status --checks standard,settings,health,history,names example
+    run_status --checks standard,settings,health,history example
     [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
     has_line example standard ok "1.0.0"
     has_line example settings ok
     has_line example health ok
     has_line example history ok
-    has_line example names ok
     [ "$(grep -c -v -E '^gh (api|release download) ' "$STUB_LOG")" -eq 0 ]
 }
 
@@ -151,7 +149,7 @@ has_line() {
     has_line example standard warn "1.0.0, the newest release is 1.1.0"
     has_line example standard warn "RELEASE_KIND=legacy"
     ADOPTED=no repo_ok other
-    run_status --checks standard,history,names other
+    run_status --checks standard,history other
     [ "$status" -eq 0 ]
     has_line other standard warn "not adopted yet"
     repo_ok source
@@ -237,17 +235,12 @@ has_line() {
     [[ $output != *1111111* ]]
 }
 
-@test "names: a copy that names a private repository is a FAIL, and the name is never shown" {
-    local blob m
+@test "a run needs no config/private-names and has no names check" {
     repo_ok example
-    blob=$(git -C "$SRC" hash-object -w --stdin <<< 'see example-private')
-    m=$BATS_TEST_TMPDIR/m2
-    manifest_of 1.0.0 "$blob" > "$m"
-    gh_reply api -H "$RAW" "repos/$OWNER/example/contents/.github/standard/MANIFEST?ref=main" < "$m"
-    run_status --checks names example
-    [ "$status" -eq 1 ]
-    has_line example names FAIL ".githooks/pre-commit names a private repository"
-    [[ $output$stderr != *example-private* ]]
+    [ ! -e "$SRC/config/private-names" ]
+    run_status example
+    [[ $output$stderr != *private-names* ]]
+    [[ $output != *"example names "* ]]
 }
 
 @test "clones: hooks, requireDenylist, the includeIf lines and the denylist counts, never a path" {

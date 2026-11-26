@@ -4,9 +4,8 @@
 #   tools/sync [--init] [--summary TEXT] --to DIR
 # It refuses a clone that is not exactly the tag vX.Y.Z of its VERSION, a release that is a draft
 # or not immutable, and a MANIFEST that differs from the release's MANIFEST asset. gh only reads.
-# It refuses when a copy or block it would write, the CHANGELOG line or the pull request text
-# names a repository of config/private-names, and it never prints the name. Then, in DIR, for the
-# profiles that DIR's .github/standard.conf selects, as standard-check selects them:
+# Then, in DIR, for the profiles that DIR's .github/standard.conf selects, as standard-check
+# selects them:
 #   1. it writes .githooks/ first, then every other copy, from the MANIFEST's blobs, and stages
 #      each with its mode;
 #   2. it replaces each block between its markers and never touches the text outside them;
@@ -157,33 +156,15 @@ VIS=$(conf VISIBILITY) LIC=$(conf LICENSE) SEAL=$(conf SEAL) awk '
                 print entry[i]
         exit bad
     }' "$manifest" > "$tmp/entries" || refuse "the MANIFEST holds a line that sync does not know"
-
-# Nothing it writes may name a private repository.
-[[ -f $src/config/private-names ]] || refuse "the clone has no config/private-names"
-sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$src/config/private-names" | tr -d '\r' > "$tmp/names"
-# True when the file $1 names a repository of config/private-names.
-names_one() {
-    [[ -s $tmp/names ]] && grep -q -i -F -f "$tmp/names" -- "$1"
-}
-while read -r type _ oid _ path; do
-    git -C "$src" cat-file blob "$oid" > "$tmp/blob" || fail "cannot read the blob of $path"
-    if names_one "$tmp/blob"; then
-        refuse "$path names a private repository (config/private-names)"
-    fi
-    # --init may copy the template of a block's file, so that template is checked too.
-    if [[ $type == block ]] && (( init )) && [[ -f $src/templates/${path%%#*} ]] &&
-        names_one "$src/templates/${path%%#*}"; then
-        refuse "templates/${path%%#*} names a private repository (config/private-names)"
-    fi
+# Every blob must be readable before the first write, so a damaged clone leaves DIR untouched.
+while read -r _ _ oid _ path; do
+    git -C "$src" cat-file -e "$oid" 2> /dev/null || fail "cannot read the blob of $path"
 done < "$tmp/entries"
+
 if (( init )); then
     line="- Repository standard $version: ${summary:-adopted, with the hooks, checks, workflows and blocks}."
 else
     line="- Repository standard $version: ${summary:-the copies and blocks of this release}."
-fi
-printf '%s\n' "$line" > "$tmp/line"
-if names_one "$tmp/line"; then
-    refuse "the CHANGELOG line names a private repository (config/private-names)"
 fi
 
 changed_files=()
@@ -480,9 +461,6 @@ list() {
         '      use the synthetic values in CONTRIBUTING.md, Test data' '' \
         'CONTRIBUTING.md describes the workflow.'
 } > "$tmp/text"
-if names_one "$tmp/text"; then
-    refuse "the pull request text names a private repository (config/private-names)"
-fi
 cat "$tmp/text"
 for entry in "${notes[@]}"; do
     say "note: $entry"

@@ -21,8 +21,6 @@ edits the copies. `.github/standard/MANIFEST` lists them.
 - `blocks/`: the canonical body of each block that repositories carry inside files they own,
   such as `blocks/SECURITY.md/reporting@private.md`. A hidden name's leading dot is written as `_`
   there (`blocks/_github/dependabot.yml/`), since git refuses a folder named `.gitattributes`.
-- `config/private-names`: the private repositories that no copy or block may name; never
-  vendored.
 - `tools/manifest`: writes `.github/standard/MANIFEST`. `tools/consumer-suite`: builds a scratch
   consumer, of a public or a private shape, that holds only what the MANIFEST vendors plus files
   of its own, where CI runs the standard's suites again. `tests/` holds the tests of `tools/`.
