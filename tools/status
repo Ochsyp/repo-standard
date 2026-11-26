@@ -72,9 +72,9 @@ JQ_SEALABLE='.[] | select((.draft | not) and (.prerelease | not)) | [.tag_name, 
 JQ_REFS='.[] | [.ref, .object.type, .object.sha] | @tsv'
 JQ_OBJECT='[.object.type, .object.sha] | @tsv'
 JQ_SEAL='[.object.type, .object.sha, (.message | split("\n") | .[0])] | @tsv'
-# The standard ruleset of a public repository after its adoption.
 # The tag ruleset of a repository that seals: deletion and update of every seal, for every login.
 SEAL_RULESET=$'active\t0\tdeletion,update\trefs/tags/seal/*\t'
+# The standard ruleset of a public repository after its adoption.
 STANDARD_RULESET=$'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368,scan:15368\tfalse\t0'
 
 # Run gh read-only: gh api with GET and no field, since a field makes it POST, or gh release
@@ -287,9 +287,31 @@ check_standard() {
     emit "$r" standard "$version, equal to the release's MANIFEST asset"
 }
 
+# Whether a ruleset whose include patterns are $1 and exclude patterns $2, each comma-separated,
+# covers a seal tag. The patterns are globs, and ~ALL covers every ref. A bash * also matches a
+# slash, so a pattern counts as covering a seal when GitHub's own match might.
+covers_seal() {
+    local ref=refs/tags/seal/v1.0.0 p hit=0
+    local -a include exclude
+    IFS=, read -r -a include <<< "$1"
+    IFS=, read -r -a exclude <<< "$2"
+    for p in "${include[@]}"; do
+        if [[ $p == '~ALL' ]]; then p='*'; fi
+        # shellcheck disable=SC2053 # the pattern is a glob on purpose
+        if [[ $ref == $p ]]; then hit=1; fi
+    done
+    (( hit )) || return 1
+    for p in "${exclude[@]}"; do
+        if [[ $p == '~ALL' ]]; then p='*'; fi
+        # shellcheck disable=SC2053 # the pattern is a glob on purpose
+        if [[ $ref == $p ]]; then return 1; fi
+    done
+    return 0
+}
+
 # The tag rulesets of a repository that seals, $1 as OWNER/NAME. One of them must be exactly
 # SEAL_RULESET, so no login deletes or moves a seal. None that is active may restrict creating a
-# tag under refs/tags/seal/, or the seal tool's push of a new seal fails.
+# tag that covers a seal, or the seal tool's push of a new seal fails.
 check_tag_rulesets() {
     local s=$1 ids id v protected=0 blocked=0
     if ! ids=$(ghr api "repos/$s/rulesets" --jq "$JQ_TAG_RULESETS" 2> /dev/null); then
@@ -303,10 +325,9 @@ check_tag_rulesets() {
             continue
         fi
         [[ $v != "$SEAL_RULESET" ]] || protected=1
-        if [[ $(cut -f 1 <<< "$v") == active && ,$(cut -f 3 <<< "$v"), == *,creation,* ]]; then
-            case ,$(cut -f 4 <<< "$v"), in
-                *",refs/tags/seal/*,"* | *",refs/tags/*,"* | *",~ALL,"*) blocked=1 ;;
-            esac
+        if [[ $(cut -f 1 <<< "$v") == active && ,$(cut -f 3 <<< "$v"), == *,creation,* ]] &&
+            covers_seal "$(cut -f 4 <<< "$v")" "$(cut -f 5 <<< "$v")"; then
+            blocked=1
         fi
     done <<< "$ids"
     (( protected )) || note FAIL "no tag ruleset blocks deleting and moving the seal tags"

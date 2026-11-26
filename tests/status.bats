@@ -273,6 +273,17 @@ has_line() {
     [ "$status" -eq 1 ]
     has_line example settings FAIL "a tag ruleset blocks creating a seal"
     [[ $output != *"no tag ruleset blocks deleting"* ]]
+    printf 'active\t0\tcreation\trefs/tags/seal/v*\t\n' |
+        gh_reply api "$r/rulesets/10" --jq "$JQ_TAG_RULESET"
+    run_status --checks settings example
+    has_line example settings FAIL "a tag ruleset blocks creating a seal"
+    # A creation rule that leaves the seals out, or one that only evaluates, blocks nothing.
+    for bad in $'active\t0\tcreation\trefs/tags/*\trefs/tags/seal/*' \
+        $'evaluate\t0\tcreation\t~ALL\t'; do
+        printf '%s\n' "$bad" | gh_reply api "$r/rulesets/10" --jq "$JQ_TAG_RULESET"
+        run_status --checks settings example
+        [ "$status" -eq 0 ] || { printf 'failed: %q\n%s\n' "$bad" "$output" >&2; return 1; }
+    done
 
     RC=1 gh_reply api "$r/rulesets" --jq "$JQ_TAG_RULESETS" < /dev/null
     run_status --checks settings example
