@@ -2,8 +2,8 @@
 
 This repository is private, and its GitHub plan offers no rulesets: nothing on GitHub blocks a
 direct push to `main` or the merge of a pull request whose checks failed. The hooks and the
-maintainer's review are the guard. The maintainer's daily check reports any commit on `main` that
-did not come from a merged pull request.
+maintainer's review are the guard. The maintainer's regular check with repo-standard's
+`tools/status` reports any commit on `main` that did not come from a merged pull request.
 
 The hooks in `.githooks/` guard every commit and push:
 - `pre-commit` refuses a commit while `main` or `master` is checked out. It also refuses a changed

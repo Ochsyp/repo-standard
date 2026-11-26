@@ -26,7 +26,7 @@ it: hosts that install this repository's releases install a sealed release only.
    while a release waits.
 6. Never delete a published release, and never move or delete a seal: a host stops on a seal
    that moved. To stop a release before its seal, leave it unsealed and tick **Set as a
-   pre-release**, so the maintainer's daily check stops asking for its seal; then ship X.Y.Z+1.
+   pre-release**, so repo-standard's `tools/status` stops asking for its seal; then ship X.Y.Z+1.
    To stop a sealed release, use the hold that the Release contract names, and ship X.Y.Z+1.
    For a container image, the pre-release tick also moves `latest` back.
 
