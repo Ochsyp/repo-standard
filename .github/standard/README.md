@@ -52,8 +52,9 @@ change to it takes effect once it is committed.
 6. The files the repository owns have their form:
    - `VERSION` is one line `X.Y.Z` or `X.Y.Z-dev`, without leading zeros;
    - each `VERSION_COPY` file holds its line for that version;
-   - `.github/dependabot.yml` has a `github-actions` entry for `/` with
-     `open-pull-requests-limit: 0`;
+   - `.github/dependabot.yml` has a `github-actions` entry for `/`, with
+     `open-pull-requests-limit: 0` in a repository that uses the standard (repo-standard's own
+     entry has no limit);
    - each stage in `CI_STAGES` has its `ci/STAGE` or `ci/STAGE.ps1`;
    - `tests/helpers.bash`, where it exists, sources `.github/standard/tests/lib.bash`;
    - no tracked file holds gitleaks' inline allow marker.
@@ -99,8 +100,8 @@ It also checks the contracts of `ci.yml`, `secret-scan.yml` and `release.yml`. A
 ### The changelog and releases
 
 `CHANGELOG.md` follows Keep a Changelog 1.1.0, and versions follow Semantic Versioning 2.0.0.
-- It opens with a `## [Unreleased]` section, then one `## [X.Y.Z] - YYYY-MM-DD` section per
-  release, newest first.
+- A header names Keep a Changelog 1.1.0 and Semantic Versioning 2.0.0. Then come a
+  `## [Unreleased]` section and one `## [X.Y.Z] - YYYY-MM-DD` section per release, newest first.
 - The subsections come in this order: Migration, Added, Changed, Deprecated, Removed, Fixed,
   Security.
 - A link block closes the file.
@@ -117,6 +118,7 @@ Every pull request adds a line under `## [Unreleased]`, with three exceptions:
 
 `secret-scan.yml` runs `bin/secret-scan`:
 1. Positive controls first: gitleaks and every enabled rule pack must find a sample.
-2. Then it scans the commits of the pull request or push, or the whole history on a schedule.
+2. Then it scans the commits of the pull request or push, or the whole history on a schedule,
+   a dispatch or a first push.
 3. Gitleaks uses its default rules only, and `.gitleaks.toml` is refused.
 4. An accepted finding names a commit that the base already holds.
