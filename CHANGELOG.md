@@ -7,6 +7,8 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-26
+
 ### Fixed
 
 - The `disk` pack reports a `/dev/disk/by-id/` name without its folder, as `lsblk` and `ls` print
@@ -288,7 +290,8 @@ Each version is the GitHub release `vX.Y.Z`.
   request passes; `standard-check` still holds the release pull request to the whole MANIFEST
   (phase 2)
 
-[Unreleased]: https://github.com/Ochsyp/repo-standard/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/Ochsyp/repo-standard/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/Ochsyp/repo-standard/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Ochsyp/repo-standard/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Ochsyp/repo-standard/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Ochsyp/repo-standard/compare/v1.0.1...v1.1.0
