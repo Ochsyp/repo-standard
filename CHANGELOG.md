@@ -32,6 +32,8 @@ Each version is the GitHub release `vX.Y.Z`.
   `conf.bats`, the `run-stage` and `install-tools` tests and the seal tool's suites. Every suite
   still runs on Linux. `ci/test.ps1` reads the pinned Pester and PSScriptAnalyzer versions from
   `install-tools`
+- The SECURITY.md, guard-rails and releasing blocks, `secret-scan` and the README no longer
+  promise a daily check: the maintainer checks regularly with repo-standard's `tools/status`
 
 ### Removed
 
