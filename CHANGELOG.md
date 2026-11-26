@@ -10,6 +10,10 @@ Each version is the GitHub release `vX.Y.Z`.
 ### Changed
 
 - The README's status names 1.2.0 as published, with what it adds
+- Neutral wording in the release steps, the seal tool's install, the release tools' comments and
+  `tools/status`'s ruleset message, which now says "the ruleset differs from the standard one"
+- The releasing blocks say that the `release` workflow builds twice and compares only for a zip,
+  tar or stack release
 - `tools/sync --init` refuses a target whose `.github/standard.conf` is not committed, or differs
   from the committed one, since the hooks and `privacy-scan` read the config from HEAD. Commit
   the config on its own before the adoption's sync
@@ -77,7 +81,7 @@ Each version is the GitHub release `vX.Y.Z`.
   and `tools/sync` select them, and without `SEAL=yes` a block that exists only as a seal variant
   must be absent. A repository that sets `SEAL=yes` adds the markers of `sealed-releases` to its
   `SECURITY.md` first (phase 3)
-- `tools/release-seal`, the seal tool of D1 = B: `check` shows a published release's checks and
+- `tools/release-seal`, the seal tool: `check` shows a published release's checks and
   facts, and `seal` signs the annotated tag `seal/vX.Y.Z` with the offline SSH key through
   `SSH_ASKPASS` only, verifies it for `maintainer` and pushes that one tag, without force, from a
   mirror of its own where no hook runs; `gh` only reads (phase 3)
@@ -180,11 +184,10 @@ Each version is the GitHub release `vX.Y.Z`.
 - `pr-text`, which refuses a pull request title that is not a Conventional Commit and runs
   title and body through the hooks' privacy scan, its denylists only through their loader, and
   `pr-title`, which checks the current title and body of a pull request in CI (phase 2)
-- `release-meta`, the release checks that came before the standard, with the launcher's version
-  rules and the `-dev` rule, which checks `VERSION`, `CHANGELOG.md` and the tags and tells
-  whether a release is unreleased, pending or released, and `changelog-entry`, which checks the
-  lines a pull request adds to `CHANGELOG.md`, with the exceptions for a release, a draft fix and
-  Dependabot (phase 2)
+- `release-meta`, the release checks with the version rules and the `-dev` rule, which checks
+  `VERSION`, `CHANGELOG.md` and the tags and tells whether a release is unreleased, pending or
+  released, and `changelog-entry`, which checks the lines a pull request adds to `CHANGELOG.md`,
+  with the exceptions for a release, a draft fix and Dependabot (phase 2)
 - `secret-scan`, which proves with positive controls that gitleaks and the rule packs still find
   something, checks that accepted findings name old commits only, refuses `.gitleaks.toml` and
   ignores inline allow markers, and scans a pull request's or a push's commits, or the whole
