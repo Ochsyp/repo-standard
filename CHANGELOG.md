@@ -19,6 +19,11 @@ Each version is the GitHub release `vX.Y.Z`.
 - `tools/status --checks settings` no longer reports a correct ruleset as "the ruleset differs
   from the standard one". Its jq filter printed a strict status-check policy of `false` as an
   empty field, since jq's `//` replaces `false` as well as `null`
+- `tools/status --checks history` no longer reports the branch commits that a merge commit
+  brings onto `main` as a direct push. A commit that GitHub's web-flow did not make now passes
+  when GitHub links it to a pull request merged into `main`; that costs one GET per such commit.
+  A commit with no such pull request is still a direct push, and one whose pull requests cannot
+  be read is reported on a line of its own
 
 ## [1.3.0] - 2026-11-26
 
