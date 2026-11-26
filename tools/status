@@ -19,8 +19,8 @@
 #   health    the last ci and secret-scan runs on main and the newest release's verify run are
 #             green; no Dependabot pull request open more than 14 days; no draft waits to be
 #             published
-#   history   commits on main since the adoption that GitHub's web-flow did not make: a direct
-#             push, by short SHA only
+#   history   commits on main since the adoption that GitHub's web-flow did not make and that no
+#             pull request merged into main brought in: a direct push, by short SHA only
 #   seal      only where the config on main says SEAL=yes: the newest published release that is
 #             not a pre-release and that github-actions[bot] drafted has its seal/vX.Y.Z, else a
 #             warn for 24 hours after the publish and a FAIL from then on; each seal is an
@@ -44,7 +44,8 @@ JQ_SHA='.sha'
 JQ_TAG='.tag_name'
 JQ_RUN='.workflow_runs[0].conclusion // "none"'
 JQ_DATES='.[].commit.committer.date'
-JQ_DIRECT='.[] | [.sha[0:7], (.committer.login // ""), (.commit.verification.verified // false)] | @tsv'
+JQ_DIRECT='.[] | [.sha, (.committer.login // ""), (.commit.verification.verified // false)] | @tsv'
+JQ_MERGED='[.[] | select(.merged_at != null and .base.ref == "main")] | length'
 JQ_REPO='[.private, .allow_squash_merge, .allow_merge_commit, .allow_rebase_merge, .squash_merge_commit_title, .squash_merge_commit_message, .delete_branch_on_merge, .allow_auto_merge, (.security_and_analysis.secret_scanning.status // "none"), (.security_and_analysis.secret_scanning_push_protection.status // "none")] | @tsv'
 JQ_ENABLED='.enabled'
 JQ_TOKEN='[.default_workflow_permissions, .can_approve_pull_request_reviews] | @tsv'
@@ -380,7 +381,7 @@ check_health() {
 }
 
 check_history() {
-    local r=$1 s=$owner/$1 since direct
+    local r=$1 s=$owner/$1 since rows sha login verified merged direct='' unknown=''
     since=$(ghr api --paginate "repos/$s/commits?sha=main&path=.github/standard/MANIFEST&per_page=100" \
         --jq "$JQ_DATES" 2> /dev/null | tail -n 1) || since=''
     if [[ -z $since ]]; then
@@ -388,12 +389,25 @@ check_history() {
         return
     fi
     # A merge in the browser or through the API is GitHub's commit: web-flow commits it and GitHub's
-    # signature on it verifies. A committer set to web-flow by hand has no such signature.
-    if direct=$(ghr api --paginate "repos/$s/commits?sha=main&since=$since&per_page=100" --jq "$JQ_DIRECT" \
-        2> /dev/null); then
-        direct=$(awk -F '\t' 'NF && ($2 != "web-flow" || $3 != "true") { print $1 }' <<< "$direct" |
-            paste -s -d ' ' -)
-        [[ -z $direct ]] || note FAIL "a direct push to main: $direct"
+    # signature on it verifies. A committer set to web-flow by hand has no such signature. A merge
+    # commit also brings its branch's own commits onto main, committed by their author: one GET per
+    # such commit asks whether a pull request merged into main brought it in. A direct push has
+    # none, and a GET that fails accepts nothing.
+    if rows=$(ghr api --paginate "repos/$s/commits?sha=main&since=$since&per_page=100" \
+        --jq "$JQ_DIRECT" 2> /dev/null); then
+        while IFS=$'\t' read -r sha login verified; do
+            [[ -n $sha ]] || continue
+            [[ $login == web-flow && $verified == true ]] && continue
+            if merged=$(ghr api "repos/$s/commits/$sha/pulls" --jq "$JQ_MERGED" 2> /dev/null); then
+                [[ $merged =~ ^[1-9][0-9]*$ ]] && continue
+                direct+=" ${sha:0:7}"
+            else
+                unknown+=" ${sha:0:7}"
+            fi
+        done <<< "$rows"
+        [[ -z $direct ]] || note FAIL "a direct push to main:$direct"
+        [[ -z $unknown ]] ||
+            note FAIL "cannot tell whether these came through a pull request:$unknown"
     else
         note FAIL "cannot read the commits of main"
     fi

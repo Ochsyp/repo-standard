@@ -248,10 +248,52 @@ has_line() {
     repo_ok example
     printf '0123456\tsomeone\ttrue\n1111111\tweb-flow\ttrue\n2222222\tweb-flow\tfalse\n' | gh_reply api --paginate \
         "repos/$OWNER/example/commits?sha=main&since=2026-11-01T10:00:00Z&per_page=100" --jq "$JQ_DIRECT"
+    printf '0\n' | gh_reply api "repos/$OWNER/example/commits/0123456/pulls" --jq "$JQ_MERGED"
+    printf '0\n' | gh_reply api "repos/$OWNER/example/commits/2222222/pulls" --jq "$JQ_MERGED"
     run_status --checks history example
     [ "$status" -eq 1 ]
     has_line example history FAIL "a direct push to main: 0123456 2222222"
     [[ $output != *1111111* ]]
+}
+
+# A merge commit brings its branch's own commits onto main, committed by their author. Each such
+# commit costs one GET, and only a pull request merged into main accepts it. A squash merge is
+# GitHub's own commit and costs none: the stub has no reply for it, so a GET would show.
+@test "history: only a pull request merged into main accepts a commit that GitHub did not make" {
+    local c="repos/$OWNER/example/commits" since=2026-11-01T10:00:00Z
+    repo_ok example
+    printf '%s\n' $'aaaaaaa1\tweb-flow\ttrue' $'bbbbbbb2\tsomeone\ttrue' \
+        $'ccccccc3\tweb-flow\ttrue' $'ddddddd4\tsomeone\tfalse' $'eeeeeee5\tsomeone\ttrue' \
+        $'fffffff6\tsomeone\ttrue' |
+        gh_reply api --paginate "$c?sha=main&since=$since&per_page=100" --jq "$JQ_DIRECT"
+    printf '1\n' | gh_reply api "$c/bbbbbbb2/pulls" --jq "$JQ_MERGED"
+    printf '0\n' | gh_reply api "$c/ddddddd4/pulls" --jq "$JQ_MERGED"
+    printf '0\n' | gh_reply api "$c/eeeeeee5/pulls" --jq "$JQ_MERGED"
+    RC=1 gh_reply api "$c/fffffff6/pulls" --jq "$JQ_MERGED" < /dev/null
+    run_status --checks history example
+    [ "$status" -eq 1 ]
+    has_line example history FAIL "a direct push to main: ddddddd eeeeeee"
+    has_line example history FAIL "cannot tell whether these came through a pull request: fffffff"
+    [[ $output != *aaaaaaa* && $output != *bbbbbbb* && $output != *ccccccc* ]]
+
+    printf '%s\n' $'aaaaaaa1\tweb-flow\ttrue' $'bbbbbbb2\tsomeone\ttrue' \
+        $'ccccccc3\tweb-flow\ttrue' |
+        gh_reply api --paginate "$c?sha=main&since=$since&per_page=100" --jq "$JQ_DIRECT"
+    run_status --checks history example
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    has_line example history ok
+}
+
+@test "history: the merged-pull-request filter counts only pull requests merged into main" {
+    need command jq
+    run jq -r "$JQ_MERGED" <<< '[{"merged_at":"2026-11-02T10:00:00Z","base":{"ref":"main"}},
+        {"merged_at":null,"base":{"ref":"main"}}]'
+    [ "$output" == 1 ]
+    run jq -r "$JQ_MERGED" <<< '[{"merged_at":null,"base":{"ref":"main"}},
+        {"merged_at":"2026-11-02T10:00:00Z","base":{"ref":"feat/example"}}]'
+    [ "$output" == 0 ]
+    run jq -r "$JQ_MERGED" <<< '[]'
+    [ "$output" == 0 ]
 }
 
 @test "a run needs no config/private-names and has no names check" {
