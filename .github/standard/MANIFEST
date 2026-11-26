@@ -8,7 +8,7 @@ file    all      a75b31ca1d9056f5487e50c0d1d262725236ce5f  100755  .githooks/pre
 file    all      56c7891c3b469719682a53fae16eca4035887aef  100755  .githooks/pre-push
 file    all      4f5b3cdb160b8dc2720991a3c2aa569a4e780a23  100755  .githooks/privacy-scan
 file    all      0cbb587f8e8aea0fff4b1e61d129f1ccf7ebaacd  100644  .githooks/rules/base
-file    all      40ca1345fcae4b716888942e08db42edf18e5d1b  100644  .githooks/rules/disk
+file    all      4a58f0f9a3fb9ce5db8f1413e9755e402ddcddb4  100644  .githooks/rules/disk
 file    all      a34753f7f764dd463fe795f388a243da0b1fcf91  100644  .githooks/rules/vm
 file    all      1fd68eab7ce3eeb367ffab3722137032ca82bdd3  100644  .github/pull_request_template.md
 file    all      8c34d2bcf43ca4bea7cffd056380b034e3f210cf  100644  .github/standard/README.md
@@ -33,7 +33,7 @@ file    all      1fee954a0ec0b922e65a395714d66d1b9f9b6792  100755  .github/stand
 file    all      b89d28c2dfa1f6459f51bb6605109206446ad400  100755  .github/standard/tests/hooks.bats
 file    all      5b922b9bbc0b43ce419575826a09b4324e58b74b  100644  .github/standard/tests/lib.bash
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
-file    all      d9668dee2515e2d650d6cef7041fba4ecd99640c  100755  .github/standard/tests/privacy-scan.bats
+file    all      94cf502b2a142c99c4667ada680e03923768f9f6  100755  .github/standard/tests/privacy-scan.bats
 file    all      1461cfbcfbd2114ac4bb0da16398dff901efc174  100755  .github/standard/tests/release-meta.bats
 file    all      ce286a83d9cbfec96e2dedd238fbe7b87d956c68  100755  .github/standard/tests/release-tools.bats
 file    all      740269bdf3d9ac8a9879f435496d613eab940b8d  100755  .github/standard/tests/secret-scan.bats

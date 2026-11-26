@@ -7,6 +7,14 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The `disk` pack reports a `/dev/disk/by-id/` name without its folder, as `lsblk` and `ls` print
+  it: a bus such as `usb-` or `ata-`, then a name with an underscore. `ntfs-serial` and
+  `uuid-dashless` also report a value next to an underscore, as in a device name. A new rule,
+  `udev-serial`, reports the disk serials and WWNs that udev prints or matches (`ID_SERIAL`,
+  `ID_SERIAL_SHORT`, `ID_WWN`). The synthetic `5ca1ab1e` and `Synthetic` values still pass
+
 ## [1.3.0] - 2026-11-26
 
 ### Added
