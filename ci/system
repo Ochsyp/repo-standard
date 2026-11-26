@@ -4,7 +4,7 @@
 # holds only what the MANIFEST vendors (tools/consumer-suite). So a vendored test that needs a
 # file only this repository holds, or scans a consumer's own files, fails before a release. Then
 # no-skips checks every run. The job standard runs the suites in this repository itself, and
-# ci/test runs them on Windows.
+# ci/test runs those of the code that runs on Windows there.
 set -euo pipefail
 dir=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/repo-standard-system
 if [[ -e $dir ]]; then

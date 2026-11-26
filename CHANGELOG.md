@@ -28,6 +28,10 @@ Each version is the GitHub release `vX.Y.Z`.
 - The config template's starter value is `VISIBILITY=public`
 - The seal shortcut "Seal NAME release" sits in the seal tool's own install folder, outside every
   clone, not on the desktop
+- repo-standard's Windows test stage runs only the suites of the code that runs on Windows:
+  `conf.bats`, the `run-stage` and `install-tools` tests and the seal tool's suites. Every suite
+  still runs on Linux. `ci/test.ps1` reads the pinned Pester and PSScriptAnalyzer versions from
+  `install-tools`
 
 ### Removed
 

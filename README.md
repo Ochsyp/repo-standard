@@ -51,7 +51,8 @@ The releases and their notes are on GitHub's Releases page and in `CHANGELOG.md`
   tests of the seal dialog (CONTRIBUTING.md, Checks).
 - CI: `ci.yml` runs the job `standard`: every vendored suite on Linux, the lint, the privacy
   packs, the MANIFEST and the pull request checks. It also runs the stage `test` on Windows
-  (`ci/test`, then the smoke test of the pinned PowerShell modules), the stage `system` on Linux
-  (the suites, lint included, in a scratch consumer of each shape) and `hooks-windows`. It fails
-  on any skipped test. `secret-scan.yml` scans each pull request's commits. `release.yml` builds a
-  pull request that touches the release files twice and compares the builds.
+  (`ci/test`: the suites of the code that runs on Windows; then the smoke test of the pinned
+  PowerShell modules), the stage `system` on Linux (the suites, lint included, in a scratch
+  consumer of each shape) and `hooks-windows`. It fails on any skipped test. `secret-scan.yml`
+  scans each pull request's commits. `release.yml` builds a pull request that touches the release
+  files twice and compares the builds.

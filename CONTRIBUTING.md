@@ -76,10 +76,11 @@ URL. Anywhere else, such as a clone made from a local path, turn them on once af
 - On Windows, the tests of the seal dialog: `.github/standard/bin/install-tools pester
   psscriptanalyzer`, the folder `modules` beside the printed one first on `PSModulePath`, then
   `powershell.exe -NoProfile -File ci/test.ps1`.
-- CI runs `standard` (every suite of the standard on Linux), `test` (Windows: `ci/test`, then
-  `ci/test.ps1`: the smoke test of the pinned PowerShell modules and the Pester tests of the seal
-  dialog), `system` (Linux: the scratch consumers, lint included) and `hooks-windows`. It fails
-  on any skipped test. Locally a test may skip only for a missing tool, such as actionlint.
+- CI runs `standard` (every suite of the standard on Linux), `test` (Windows: `ci/test`, the
+  suites of the code that runs on Windows, then `ci/test.ps1`: the smoke test of the pinned
+  PowerShell modules and the Pester tests of the seal dialog), `system` (Linux: the scratch
+  consumers, lint included) and `hooks-windows`. It fails on any skipped test. Locally a test may
+  skip only for a missing tool, such as actionlint.
 
 ## Test data
 
