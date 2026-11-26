@@ -230,6 +230,66 @@ has_line() {
     [[ $output == *$'\ttrue\t0' ]]
 }
 
+# A repository that seals (SEAL=yes) needs a tag ruleset that refuses to delete or move any seal,
+# for every login, and no tag ruleset may refuse to create one: the seal tool pushes a new tag.
+@test "settings of a sealed repository: a tag ruleset protects seals and none blocks a new one" {
+    local r="repos/$OWNER/example"
+    VIS=public repo_ok example
+    printf 'NAME=example\nVISIBILITY=public\nRELEASE_KIND=tar\nSEAL=yes\n' |
+        gh_reply api -H "$RAW" "$r/contents/.github/standard.conf?ref=main"
+    : | gh_reply api "$r/rulesets" --jq "$JQ_TAG_RULESETS"
+    run_status --checks settings example
+    [ "$status" -eq 1 ]
+    has_line example settings FAIL "no tag ruleset blocks deleting and moving the seal tags"
+
+    printf '9\n' | gh_reply api "$r/rulesets" --jq "$JQ_TAG_RULESETS"
+    printf 'active\t0\tdeletion,update\trefs/tags/seal/*\t\n' |
+        gh_reply api "$r/rulesets/9" --jq "$JQ_TAG_RULESET"
+    run_status --checks settings example
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    has_line example settings ok
+
+    local bad
+    for bad in $'active\t1\tdeletion,update\trefs/tags/seal/*\t' \
+        $'evaluate\t0\tdeletion,update\trefs/tags/seal/*\t' \
+        $'active\t0\tdeletion\trefs/tags/seal/*\t' $'active\t0\tdeletion,update\trefs/tags/*\t'; do
+        printf '%s\n' "$bad" | gh_reply api "$r/rulesets/9" --jq "$JQ_TAG_RULESET"
+        run_status --checks settings example
+        [ "$status" -eq 1 ] || { printf 'passed: %q\n' "$bad" >&2; return 1; }
+        has_line example settings FAIL "no tag ruleset blocks deleting and moving the seal tags"
+    done
+
+    printf 'active\t0\tcreation,deletion,update\trefs/tags/seal/*\t\n' |
+        gh_reply api "$r/rulesets/9" --jq "$JQ_TAG_RULESET"
+    run_status --checks settings example
+    [ "$status" -eq 1 ]
+    has_line example settings FAIL "a tag ruleset blocks creating a seal"
+
+    printf '9\n10\n' | gh_reply api "$r/rulesets" --jq "$JQ_TAG_RULESETS"
+    printf 'active\t0\tdeletion,update\trefs/tags/seal/*\t\n' |
+        gh_reply api "$r/rulesets/9" --jq "$JQ_TAG_RULESET"
+    printf 'active\t0\tcreation\t~ALL\t\n' | gh_reply api "$r/rulesets/10" --jq "$JQ_TAG_RULESET"
+    run_status --checks settings example
+    [ "$status" -eq 1 ]
+    has_line example settings FAIL "a tag ruleset blocks creating a seal"
+    [[ $output != *"no tag ruleset blocks deleting"* ]]
+
+    RC=1 gh_reply api "$r/rulesets" --jq "$JQ_TAG_RULESETS" < /dev/null
+    run_status --checks settings example
+    [ "$status" -eq 1 ]
+    has_line example settings FAIL "cannot read the tag rulesets"
+}
+
+@test "settings: the tag ruleset filter turns GitHub's seal-tag ruleset into the standard line" {
+    need command jq
+    run jq -r "$JQ_TAG_RULESET" <<< '{"target":"tag","enforcement":"active","bypass_actors":[],
+        "conditions":{"ref_name":{"include":["refs/tags/seal/*"],"exclude":[]}},
+        "rules":[{"type":"update"},{"type":"deletion"}]}'
+    [ "$status" -eq 0 ]
+    [ "$output" == "$SEAL_RULESET" ] ||
+        { printf 'got:  %q\nwant: %q\n' "$output" "$SEAL_RULESET" >&2; return 1; }
+}
+
 @test "health: a red ci on main, an old Dependabot pull request and a waiting draft" {
     repo_ok example
     printf 'failure\n' | gh_reply api "repos/$OWNER/example/actions/workflows/ci.yml/runs?branch=main&per_page=1" --jq "$JQ_RUN"

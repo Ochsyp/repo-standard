@@ -15,7 +15,9 @@
 #             COMMIT_MESSAGES, merged branches deleted, no auto-merge; GitHub's visibility equal to
 #             VISIBILITY; the Actions allow-list equal to actions.allow (temporary entries warn
 #             until the adoption; github/codeql-action may stay) with SHA pinning; for a public
-#             repository the standard ruleset exactly, secret scanning and push protection
+#             repository the standard ruleset exactly, secret scanning and push protection; where
+#             the config says SEAL=yes, a tag ruleset that keeps every login from deleting or
+#             moving refs/tags/seal/*, and none that blocks creating a seal
 #   health    the last ci and secret-scan runs on main and the newest release's verify run are
 #             green; no Dependabot pull request open more than 14 days; no draft waits to be
 #             published
@@ -56,6 +58,8 @@ JQ_RULESETS='.[] | select(.target == "branch") | .id'
 # The policy and the review count become text before first // "", since jq's // replaces
 # false as well as null.
 JQ_RULESET='[.enforcement, (.bypass_actors | length), ([.rules[].type] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | "\(.context):\(.integration_id)"] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.strict_required_status_checks_policy | tostring] | first // ""), ([.rules[] | select(.type == "pull_request") | .parameters.required_approving_review_count | tostring] | first // "")] | @tsv'
+JQ_TAG_RULESETS='.[] | select(.target == "tag") | .id'
+JQ_TAG_RULESET='[.enforcement, (.bypass_actors | length), ([.rules[].type] | sort | join(",")), ((.conditions.ref_name.include // []) | sort | join(",")), ((.conditions.ref_name.exclude // []) | sort | join(","))] | @tsv'
 JQ_DEPENDABOT='.[] | select(.user.login == "dependabot[bot]") | [.number, .created_at[0:10]] | @tsv'
 JQ_DRAFTS='.[] | select(.draft) | .tag_name'
 JQ_PRS='.[] | [.number, .updated_at] | @tsv'
@@ -69,6 +73,8 @@ JQ_REFS='.[] | [.ref, .object.type, .object.sha] | @tsv'
 JQ_OBJECT='[.object.type, .object.sha] | @tsv'
 JQ_SEAL='[.object.type, .object.sha, (.message | split("\n") | .[0])] | @tsv'
 # The standard ruleset of a public repository after its adoption.
+# The tag ruleset of a repository that seals: deletion and update of every seal, for every login.
+SEAL_RULESET=$'active\t0\tdeletion,update\trefs/tags/seal/*\t'
 STANDARD_RULESET=$'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368,scan:15368\tfalse\t0'
 
 # Run gh read-only: gh api with GET and no field, since a field makes it POST, or gh release
@@ -281,12 +287,41 @@ check_standard() {
     emit "$r" standard "$version, equal to the release's MANIFEST asset"
 }
 
+# The tag rulesets of a repository that seals, $1 as OWNER/NAME. One of them must be exactly
+# SEAL_RULESET, so no login deletes or moves a seal. None that is active may restrict creating a
+# tag under refs/tags/seal/, or the seal tool's push of a new seal fails.
+check_tag_rulesets() {
+    local s=$1 ids id v protected=0 blocked=0
+    if ! ids=$(ghr api "repos/$s/rulesets" --jq "$JQ_TAG_RULESETS" 2> /dev/null); then
+        note FAIL "cannot read the tag rulesets"
+        return 0
+    fi
+    while IFS= read -r id; do
+        [[ -n $id ]] || continue
+        if ! v=$(ghr api "repos/$s/rulesets/$id" --jq "$JQ_TAG_RULESET" 2> /dev/null); then
+            note FAIL "cannot read tag ruleset $id"
+            continue
+        fi
+        [[ $v != "$SEAL_RULESET" ]] || protected=1
+        if [[ $(cut -f 1 <<< "$v") == active && ,$(cut -f 3 <<< "$v"), == *,creation,* ]]; then
+            case ,$(cut -f 4 <<< "$v"), in
+                *",refs/tags/seal/*,"* | *",refs/tags/*,"* | *",~ALL,"*) blocked=1 ;;
+            esac
+        fi
+    done <<< "$ids"
+    (( protected )) || note FAIL "no tag ruleset blocks deleting and moving the seal tags"
+    if (( blocked )); then note FAIL "a tag ruleset blocks creating a seal"; fi
+    return 0
+}
+
 check_settings() {
     local r=$1 s=$owner/$1 is_adopted=0 vis='' v private squash merge rebase title message delete auto
     local scanning push token approve enabled allowed pinning owned verified rules id pattern
+    local seals=0
     adopted "$s" && is_adopted=1
     if fetch "$s" .github/standard.conf "$tmp/$r.conf"; then
         vis=$(sed -n 's/^VISIBILITY=\([a-z]*\)$/\1/p' "$tmp/$r.conf" | head -n 1)
+        ! grep -q -x 'SEAL=yes' "$tmp/$r.conf" || seals=1
     fi
     if v=$(ghr api "repos/$s" --jq "$JQ_REPO" 2> /dev/null); then
         IFS=$'\t' read -r private squash merge rebase title message delete auto scanning push <<< "$v"
@@ -321,6 +356,7 @@ check_settings() {
     fi
     v=$(ghr api "repos/$s/immutable-releases" --jq "$JQ_ENABLED" 2> /dev/null) || v=''
     [[ $v == true ]] || note FAIL "immutable releases are off"
+    (( ! seals )) || check_tag_rulesets "$s"
     if v=$(ghr api "repos/$s/actions/permissions/workflow" --jq "$JQ_TOKEN" 2> /dev/null); then
         IFS=$'\t' read -r token approve <<< "$v"
         [[ $token == read ]] || note FAIL "the workflow token may write"

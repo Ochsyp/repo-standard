@@ -13,5 +13,7 @@ It also checks the seal's message, that the seal and `vX.Y.Z` name the same comm
 commit is on `main`, that no tag it has seen has moved, and that the version is newer. It needs
 no GitHub token for this and calls no API. A stolen GitHub token or session can publish a
 release but cannot seal it, so no host installs that release. A seal never moves and is never
-deleted. A release that must not be installed stays unsealed, or is held on the hosts as the
-Release contract in `CONTRIBUTING.md` says.
+deleted: a tag ruleset on GitHub refuses to delete or move any `seal/*` tag, for every login,
+and repo-standard's `tools/status` checks that it is in place. A release that must not be
+installed stays unsealed, or is held on the hosts as the Release contract in `CONTRIBUTING.md`
+says.
