@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/sync of repo-standard: writes a published release of the standard into the worktree of a
-# repository of the standard (spec 6.2), run from a clone of that release's tag (5.3, step 3):
+# repository of the standard, run from a clone of that release's tag:
 #   tools/sync [--init] [--summary TEXT] --to DIR
 # It refuses a clone that is not exactly the tag vX.Y.Z of its VERSION, a release that is a draft
 # or not immutable, and a MANIFEST that differs from the release's MANIFEST asset. gh only reads.
