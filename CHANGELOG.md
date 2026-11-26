@@ -14,6 +14,8 @@ Each version is the GitHub release `vX.Y.Z`.
   `uuid-dashless` also report a value next to an underscore, as in a device name. A new rule,
   `udev-serial`, reports the disk serials and WWNs that udev prints or matches (`ID_SERIAL`,
   `ID_SERIAL_SHORT`, `ID_WWN`). The synthetic `5ca1ab1e` and `Synthetic` values still pass
+- `conf --samples` has realistic values for these new forms and for `udev-serial`, so
+  `conf --check` refuses a `PRIVACY_ALLOW` value that would exempt a real one
 
 ## [1.3.0] - 2026-11-26
 
