@@ -156,6 +156,10 @@ VIS=$(conf VISIBILITY) LIC=$(conf LICENSE) SEAL=$(conf SEAL) awk '
                 print entry[i]
         exit bad
     }' "$manifest" > "$tmp/entries" || refuse "the MANIFEST holds a line that sync does not know"
+# Every blob must be readable before the first write, so a damaged clone leaves DIR untouched.
+while read -r _ _ oid _ path; do
+    git -C "$src" cat-file -e "$oid" 2> /dev/null || fail "cannot read the blob of $path"
+done < "$tmp/entries"
 
 if (( init )); then
     line="- Repository standard $version: ${summary:-adopted, with the hooks, checks, workflows and blocks}."
