@@ -3,7 +3,7 @@
 GitHub Actions builds each release, and the maintainer publishes it in the browser, then seals
 it: hosts that install this repository's releases install a sealed release only.
 
-1. A session opens the release pull request `chore/release-X.Y.Z`, written with
+1. The maintainer opens the release pull request `chore/release-X.Y.Z`, written with
    `.github/standard/bin/release-prepare`: `VERSION`, the `VERSION_COPY` files, and the
    `CHANGELOG.md` section with its links. Its body names the dependency updates since the last
    release. CI checks the version, the date and the links. The `release` workflow builds the
@@ -30,5 +30,5 @@ it: hosts that install this repository's releases install a sealed release only.
    To stop a sealed release, use the hold that the Release contract names, and ship X.Y.Z+1.
    For a container image, the pre-release tick also moves `latest` back.
 
-Sessions prepare release pull requests. They never create a tag or a seal, and never publish,
-edit or delete a release.
+Only the maintainer publishes a release. No one creates a release tag or a seal by hand, and no
+script or automation publishes, edits or deletes a release.

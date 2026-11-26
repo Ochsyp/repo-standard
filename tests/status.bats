@@ -194,7 +194,7 @@ has_line() {
     [[ $output != *codeql* ]]
 }
 
-@test "settings of a public repository: the D4 ruleset exactly, secret scanning and push protection" {
+@test "settings of a public repository: the standard ruleset exactly, secret scanning and push protection" {
     VIS=public repo_ok example
     run_status --checks settings example
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
@@ -205,7 +205,7 @@ has_line() {
         gh_reply api "repos/$OWNER/example" --jq "$JQ_REPO"
     run_status --checks settings example
     [ "$status" -eq 1 ]
-    has_line example settings FAIL "the ruleset differs from D4"
+    has_line example settings FAIL "the ruleset differs from the standard one"
     has_line example settings FAIL "secret scanning is off"
     printf 'NAME=example\nVISIBILITY=private\nRELEASE_KIND=tar\n' |
         gh_reply api -H "$RAW" "repos/$OWNER/example/contents/.github/standard.conf?ref=main"

@@ -27,9 +27,9 @@ holds for the maintainer too.
 One pull request holds one phase or one change.
 
 Repository work happens only on a machine with the maintainer's git configuration, never in a
-cloud session. That configuration turns the hooks on and loads the denylists for every clone of
-this repository's GitHub URL. A clone made from a local path gets no hooks, so run
-`git config core.hooksPath .githooks` in it right after cloning.
+hosted environment such as a codespace or a cloud workspace. That configuration turns the hooks
+on and loads the denylists for every clone of this repository's GitHub URL. A clone made from a
+local path gets no hooks, so run `git config core.hooksPath .githooks` in it right after cloning.
 
 An outside contributor's pull request is reviewed in the browser and through CI. Hooks run from
 the checked-out tree with the maintainer's credentials, even during a fetch, so:
@@ -99,15 +99,16 @@ exemption and no accepted finding.
    `.github/standard/bin/release-prepare`) raises `VERSION`. PATCH: fixes, pins and new pack
    rules. MINOR: new optional keys or features. MAJOR: a repository must change a file of its
    own.
-4. After the owner publishes a release, each repository syncs in its next gap: `tools/sync`, run
-   from a clone of the published tag, writes it into a worktree on `chore/standard-X.Y.Z`.
+4. After the owner publishes a release, each repository syncs when its owner next works on it:
+   `tools/sync`, run from a clone of the published tag, writes it into a worktree on
+   `chore/standard-X.Y.Z`.
 
 <!-- standard:begin releasing -->
 ## Releasing
 
 GitHub Actions builds each release, and the maintainer publishes it in the browser.
 
-1. A session opens the release pull request `chore/release-X.Y.Z`, written with
+1. The maintainer opens the release pull request `chore/release-X.Y.Z`, written with
    `.github/standard/bin/release-prepare`: `VERSION`, the `VERSION_COPY` files, and the
    `CHANGELOG.md` section with its links. Its body names the dependency updates since the last
    release. CI checks the version, the date and the links. The `release` workflow builds the
@@ -126,8 +127,8 @@ GitHub Actions builds each release, and the maintainer publishes it in the brows
    clients and updaters ignore it, and ship X.Y.Z+1. For a container image, the tick also moves
    `latest` back.
 
-Sessions prepare release pull requests. They never create a tag, and never publish, edit or
-delete a release.
+Only the maintainer publishes a release. No one creates a release tag by hand, and no script or
+automation publishes, edits or deletes a release.
 <!-- standard:end releasing -->
 
 ## Release contract
@@ -144,8 +145,8 @@ A release `vX.Y.Z` holds:
 compare each MANIFEST with its asset.
 
 The seal tool runs on the maintainer's Windows PC, outside every clone. It needs Git for Windows
-(bash, git, ssh-keygen) and a logged-in `gh`. The managing session installs or
-updates it only from a published, immutable release and only after the maintainer's OK:
+(bash, git, ssh-keygen) and a logged-in `gh`. The maintainer installs or updates it only from a
+published, immutable release:
 
 1. `gh release download vX.Y.Z -R OWNER/repo-standard --pattern 'release-seal*' --dir FOLDER`,
    into a folder of its own outside every git work tree.

@@ -2,7 +2,7 @@
 
 GitHub Actions builds each release, and the maintainer publishes it in the browser.
 
-1. A session opens the release pull request `chore/release-X.Y.Z`, written with
+1. The maintainer opens the release pull request `chore/release-X.Y.Z`, written with
    `.github/standard/bin/release-prepare`: `VERSION`, the `VERSION_COPY` files, and the
    `CHANGELOG.md` section with its links. Its body names the dependency updates since the last
    release. CI checks the version, the date and the links. The `release` workflow builds the
@@ -21,5 +21,5 @@ GitHub Actions builds each release, and the maintainer publishes it in the brows
    clients and updaters ignore it, and ship X.Y.Z+1. For a container image, the tick also moves
    `latest` back.
 
-Sessions prepare release pull requests. They never create a tag, and never publish, edit or
-delete a release.
+Only the maintainer publishes a release. No one creates a release tag by hand, and no script or
+automation publishes, edits or deletes a release.
