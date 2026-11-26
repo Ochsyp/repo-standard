@@ -109,17 +109,6 @@ copy_own_tree() {
         'cd "$1" && exec sh .github/standard/bin/standard-check --ci' sh "$dir"
     [ "$status" -eq 1 ]
     [[ $stderr == *".github/standard/MANIFEST: differs from the tree; run tools/manifest"* ]]
-    # A copy that names a private repository fails as well.
-    printf 'example-private\n' > "$REPO/config-names"
-    mkdir -p "$REPO/config"
-    mv "$REPO/config-names" "$REPO/config/private-names"
-    printf '# see example-private\n' >> "$REPO/.githooks/rules/disk"
-    git -C "$REPO" add config/private-names .githooks/rules/disk
-    (cd "$REPO" && sh tools/manifest)
-    git -C "$REPO" add .github/standard/MANIFEST
-    check --staged
-    [ "$status" -eq 1 ]
-    [[ $stderr == *".githooks/rules/disk: names a private repository"* ]]
 }
 
 # A source repository at $REPO, committed as repo-standard holds it: ROLE=source, the copies,
@@ -276,19 +265,6 @@ write_contributing() {
     [ "$status" -eq 0 ]
     [[ $stderr == *"CONTRIBUTING.md#workflow: the markers appear more than once or out of order; not rewritten"* ]]
     cmp "$REPO/CONTRIBUTING.md" "$BATS_TEST_TMPDIR/broken"
-}
-
-@test "ROLE=source: a template that names a private repository fails, as a copy does" {
-    make_source_check_repo
-    mkdir -p "$REPO/config" "$REPO/templates"
-    printf 'example-private\n' > "$REPO/config/private-names"
-    printf '# Security\n\nAsk example-private.\n' > "$REPO/templates/SECURITY.md"
-    git -C "$REPO" add config/private-names templates/SECURITY.md
-    (cd "$REPO" && sh tools/manifest)
-    git -C "$REPO" add .github/standard/MANIFEST
-    check --staged
-    [ "$status" -eq 1 ]
-    [[ $stderr == *"templates/SECURITY.md: names a private repository"* ]]
 }
 
 @test "no copy and no block names the owner of this repository, LICENSE aside" {

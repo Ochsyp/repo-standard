@@ -24,10 +24,9 @@
 /CONTRIBUTING.md export-ignore
 # standard:end gitattributes
 # repo-standard's release tarball carries the canonical files, so the folders and files the block
-# keeps out of archives come back in here. config/ names the private repositories and stays out.
+# keeps out of archives come back in here.
 /.github/ -export-ignore
 /.githooks/ -export-ignore
 /ci/ -export-ignore
 /tests/ -export-ignore
 /.shellcheckrc -export-ignore
-/config/ export-ignore

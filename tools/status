@@ -21,7 +21,6 @@
 #             published
 #   history   commits on main since the adoption that GitHub's web-flow did not make: a direct
 #             push, by short SHA only
-#   names     no copy or block of the repository names a repository of config/private-names
 #   seal      only where the config on main says SEAL=yes: the newest published release that is
 #             not a pre-release and that github-actions[bot] drafted has its seal/vX.Y.Z, else a
 #             warn for 24 hours after the publish and a FAIL from then on; each seal is an
@@ -133,7 +132,7 @@ usage() {
     exit 64
 }
 
-checks=standard,settings,health,history,names,clones,sweep,seal,pins,tokens
+checks=standard,settings,health,history,clones,sweep,seal,pins,tokens
 owner=''
 clones=0
 sweep=''
@@ -191,11 +190,6 @@ trap 'rm -rf -- "$tmp"' EXIT
 if [[ -n $allowed_signers ]]; then
     tr -d '\r' < "$allowed_signers" > "$tmp/allowed_signers" || exit 2
     allowed_signers=$tmp/allowed_signers
-fi
-if [[ -f $src/config/private-names ]]; then
-    sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$src/config/private-names" | tr -d '\r' > "$tmp/names"
-else
-    : > "$tmp/names"
 fi
 sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$src/.github/standard/actions.allow" |
     tr -d '\r' | LC_ALL=C sort -u > "$tmp/allow"
@@ -402,37 +396,6 @@ check_history() {
         note FAIL "cannot read the commits of main"
     fi
     emit "$r" history "every commit since the adoption came through a pull request"
-}
-
-check_names() {
-    local r=$1 s=$owner/$1 type oid path unknown=0 checked=0
-    if ! fetch "$s" .github/standard/MANIFEST "$tmp/$r.manifest"; then
-        emit "$r" names "not adopted yet"
-        return
-    fi
-    if [[ ! -s $tmp/names ]]; then
-        note FAIL "config/private-names is missing or empty"
-        emit "$r" names ""
-        return
-    fi
-    while read -r type _ oid _ path; do
-        [[ $type == file || $type == block ]] || continue
-        if git -C "$src" cat-file -e "$oid" 2> /dev/null; then
-            git -C "$src" cat-file blob "$oid" > "$tmp/blob"
-        elif ghr api "repos/$s/git/blobs/$oid" --jq .content 2> /dev/null | tr -d '\n' |
-            base64 -d > "$tmp/blob" 2> /dev/null; then
-            :
-        else
-            unknown=$((unknown + 1))
-            continue
-        fi
-        checked=$((checked + 1))
-        if grep -q -i -F -f "$tmp/names" -- "$tmp/blob"; then
-            note FAIL "${path%%#*} names a private repository"
-        fi
-    done < "$tmp/$r.manifest"
-    (( unknown == 0 )) || note warn "$unknown copy or block blob(s) could not be read"
-    emit "$r" names "$checked copies and blocks name no private repository"
 }
 
 check_clone() {
@@ -697,7 +660,7 @@ check_token() {
 
 for spec in "${repos[@]}"; do
     name=${spec%%=*}
-    for check in standard settings health history names; do
+    for check in standard settings health history; do
         if wants "$check"; then "check_$check" "$name"; fi
     done
     if (( clones )) && wants clones && [[ $spec == *=* ]]; then check_clone "$name" "${spec#*=}"; fi

@@ -2,9 +2,8 @@
 
 Files listed in `.github/standard/MANIFEST` are copies of the repository standard. Never edit
 them here: change repo-standard, release it, and sync with a `chore/standard-X.Y.Z` pull request.
-CI fails when a copy differs or changes on another branch. Sync summaries and pull request texts
-here name no other repository. An exemption, an accepted finding or a dropped check comes in a
-`chore/privacy-*` pull request of its own.
+CI fails when a copy differs or changes on another branch. An exemption, an accepted finding or a
+dropped check comes in a `chore/privacy-*` pull request of its own.
 
 When a private repository goes public, it does so in this order. A pull request sets
 `VISIBILITY=public`, and `tools/sync` writes the public block texts into it. The maintainer
