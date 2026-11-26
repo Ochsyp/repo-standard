@@ -16,6 +16,9 @@ Each version is the GitHub release `vX.Y.Z`.
   `ID_SERIAL_SHORT`, `ID_WWN`). The synthetic `5ca1ab1e` and `Synthetic` values still pass
 - `conf --samples` has realistic values for these new forms and for `udev-serial`, so
   `conf --check` refuses a `PRIVACY_ALLOW` value that would exempt a real one
+- `tools/status --checks settings` no longer reports a correct ruleset as "the ruleset differs
+  from the standard one". Its jq filter printed a strict status-check policy of `false` as an
+  empty field, since jq's `//` replaces `false` as well as `null`
 
 ## [1.3.0] - 2026-11-26
 
