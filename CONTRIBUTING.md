@@ -153,7 +153,8 @@ published, immutable release:
    files; any failure stops the install.
 3. `FOLDER/config` with the lines `SIGNING_KEY=` the offline key's private file and
    `ALLOWED_SIGNERS=` the allowed signers file that the hosts trust, principal `maintainer`.
-4. For each repository with `SEAL=yes`, a desktop shortcut "Seal NAME release" with the target
+4. For each repository with `SEAL=yes`, a shortcut "Seal NAME release" in `FOLDER` itself, beside
+   the three files and outside every clone, with the target
    `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File
    "FOLDER\release-seal.ps1" -Repo OWNER/NAME`.
 

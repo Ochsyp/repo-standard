@@ -18,6 +18,8 @@ Each version is the GitHub release `vX.Y.Z`.
   from the committed one, since the hooks and `privacy-scan` read the config from HEAD. Commit
   the config on its own before the adoption's sync
 - The config template's starter value is `VISIBILITY=public`
+- The seal shortcut "Seal NAME release" sits in the seal tool's own install folder, outside every
+  clone, not on the desktop
 
 ### Removed
 
