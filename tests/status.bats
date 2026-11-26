@@ -211,6 +211,25 @@ has_line() {
     has_line example settings FAIL "VISIBILITY=private, but GitHub shows it public"
 }
 
+# The other tests reply with a finished line; this one runs JQ_RULESET itself, on a ruleset as
+# GitHub's API returns it, so a jq default that swallows false shows.
+@test "settings: the ruleset filter turns GitHub's standard ruleset into the standard line" {
+    local ruleset
+    need command jq
+    ruleset='{"enforcement":"active","bypass_actors":[],"rules":[{"type":"deletion"},
+        {"type":"non_fast_forward"},{"type":"pull_request","parameters":
+        {"required_approving_review_count":0}},{"type":"required_status_checks","parameters":
+        {"strict_required_status_checks_policy":false,"required_status_checks":
+        [{"context":"scan","integration_id":15368},
+        {"context":"all-passed","integration_id":15368}]}}]}'
+    run jq -r "$JQ_RULESET" <<< "$ruleset"
+    [ "$status" -eq 0 ]
+    [ "$output" == "$STANDARD_RULESET" ] ||
+        { printf 'got:  %q\nwant: %q\n' "$output" "$STANDARD_RULESET" >&2; return 1; }
+    run jq -r "$JQ_RULESET" <<< "${ruleset/:false,/:true,}"
+    [[ $output == *$'\ttrue\t0' ]]
+}
+
 @test "health: a red ci on main, an old Dependabot pull request and a waiting draft" {
     repo_ok example
     printf 'failure\n' | gh_reply api "repos/$OWNER/example/actions/workflows/ci.yml/runs?branch=main&per_page=1" --jq "$JQ_RUN"

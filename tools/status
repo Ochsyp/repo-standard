@@ -52,7 +52,9 @@ JQ_ACTIONS='[.enabled, .allowed_actions, .sha_pinning_required] | @tsv'
 JQ_OWNED='[.github_owned_allowed, .verified_allowed] | @tsv'
 JQ_PATTERNS='.patterns_allowed[]'
 JQ_RULESETS='.[] | select(.target == "branch") | .id'
-JQ_RULESET='[.enforcement, (.bypass_actors | length), ([.rules[].type] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | "\(.context):\(.integration_id)"] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.strict_required_status_checks_policy] | first // ""), ([.rules[] | select(.type == "pull_request") | .parameters.required_approving_review_count] | first // "")] | @tsv'
+# The policy and the review count become text before first // "", since jq's // replaces
+# false as well as null.
+JQ_RULESET='[.enforcement, (.bypass_actors | length), ([.rules[].type] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | "\(.context):\(.integration_id)"] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.strict_required_status_checks_policy | tostring] | first // ""), ([.rules[] | select(.type == "pull_request") | .parameters.required_approving_review_count | tostring] | first // "")] | @tsv'
 JQ_DEPENDABOT='.[] | select(.user.login == "dependabot[bot]") | [.number, .created_at[0:10]] | @tsv'
 JQ_DRAFTS='.[] | select(.draft) | .tag_name'
 JQ_PRS='.[] | [.number, .updated_at] | @tsv'
