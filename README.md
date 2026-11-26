@@ -3,8 +3,8 @@
 The repository standard shared by the owner's repositories: git hooks and privacy rules, CI,
 release and secret-scan workflows, Dependabot, a pull request template and bats tests. This
 repository holds the canonical files at their real paths and publishes immutable versions
-`vX.Y.Z`. Each repository of the standard vendors a published version with `tools/sync` and never
-edits the copies. `.github/standard/MANIFEST` lists them.
+`vX.Y.Z`. Repositories adopt a published version with `tools/sync` and never edit the copies.
+`.github/standard/MANIFEST` lists them.
 
 ## Layout
 
@@ -36,13 +36,9 @@ edits the copies. `.github/standard/MANIFEST` lists them.
 - CONTRIBUTING.md and SECURITY.md: how this repository is changed and released, and its trust
   model.
 
-## Status
+## Releases
 
-Versions 1.0.0, 1.0.1, 1.1.0 and 1.2.0 are published. 1.1.0 brings the seal: the key `SEAL`, the
-seal blocks, the seal tool and the seal check of `tools/status`. 1.2.0 adds the seal tool's check
-that a repository's config sets `SEAL=yes` and the commits behind each finding of a history scan.
-It exempts a hyphenated host-name label only after `.local`, and puts the shared texts and
-comments in plain words.
+The releases and their notes are on GitHub's Releases page and in `CHANGELOG.md`.
 
 ## Checks
 
