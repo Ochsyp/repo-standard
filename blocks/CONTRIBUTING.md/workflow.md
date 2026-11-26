@@ -21,9 +21,9 @@ holds for the maintainer too.
 One pull request holds one phase or one change.
 
 Repository work happens only on a machine with the maintainer's git configuration, never in a
-cloud session. That configuration turns the hooks on and loads the denylists for every clone of
-this repository's GitHub URL. A clone made from a local path gets no hooks, so run
-`git config core.hooksPath .githooks` in it right after cloning.
+hosted environment such as a codespace or a cloud workspace. That configuration turns the hooks
+on and loads the denylists for every clone of this repository's GitHub URL. A clone made from a
+local path gets no hooks, so run `git config core.hooksPath .githooks` in it right after cloning.
 
 An outside contributor's pull request is reviewed in the browser and through CI. Hooks run from
 the checked-out tree with the maintainer's credentials, even during a fetch, so:
