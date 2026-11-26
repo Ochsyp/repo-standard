@@ -10,6 +10,8 @@ Each version is the GitHub release `vX.Y.Z`.
 ### Changed
 
 - The README's status names 1.2.0 as published, with what it adds
+- The README points to GitHub's Releases page and `CHANGELOG.md` instead of keeping a Status
+  section of its own, so a release needs no README pull request afterwards
 - Neutral wording in the release steps, the seal tool's install, the release tools' comments and
   `tools/status`'s ruleset message, which now says "the ruleset differs from the standard one"
 - The releasing blocks say that the `release` workflow builds twice and compares only for a zip,
