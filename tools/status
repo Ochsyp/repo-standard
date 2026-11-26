@@ -1,6 +1,6 @@
 #!/bin/bash
-# tools/status of repo-standard: the read-only audit of the repositories of the standard (spec
-# 6.5), for the owner's regular audit. It runs from a clone of repo-standard, whose
+# tools/status of repo-standard: the read-only audit of the repositories of the standard,
+# for the owner's regular audit. It runs from a clone of repo-standard, whose
 # origin names the owner and repo-standard itself, and reads GitHub with gh, GET only.
 #   tools/status [--checks LIST] [--owner OWNER] [--clones] [--sweep DIR] [--git-base URL]
 #                [--allowed-signers FILE] [--token NAME=YYYY-MM-DD]... [--today YYYY-MM-DD]

@@ -1,6 +1,6 @@
 #!/bin/bash
 # release-meta of the repository standard: the same file in every repository; never edit it
-# here. Checks that VERSION, CHANGELOG.md and the release tags agree (spec 3.8 and 3.9), and
+# here. Checks that VERSION, CHANGELOG.md and the release tags agree, and
 # prints version=, latest= and state= lines for CI. It applies the version rules and the -dev
 # rule.
 #   release-meta check [--event EVENT] [--release vX.Y.Z] [--root DIR]
@@ -156,7 +156,8 @@ version_text() {
 
 # Read CHANGELOG.md: the header before the first "## " heading, the sections, the [Unreleased]
 # entry, and the link references of [Unreleased] and [X.Y.Z]. Reports the headings and the
-# subsections that break spec 3.8, and text after the link block. Returns 1 when unreadable.
+# subsections that break the changelog rules, and text after the link block. Returns 1 when
+# unreadable.
 read_changelog() {
     local file="$ROOT/CHANGELOG.md" line label version n=0 in_unreleased=0 first_link=0
     local in_header=1 section="" last_sub=-1 sub idx i

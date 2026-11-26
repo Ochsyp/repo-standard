@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# status.bats of repo-standard: tools/status, the read-only audit (spec 6.5), against the gh stub
+# status.bats of repo-standard: tools/status, the read-only audit, against the gh stub
 # with fixed replies and bare local repositories. The tests source the tool with STATUS_LIB=1 for
 # its jq filters, so each stub reply answers exactly the call the tool makes. Every value is
 # synthetic; a run must never show a path, HOME or a denylist term.

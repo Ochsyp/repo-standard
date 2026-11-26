@@ -9,7 +9,7 @@
 version: 2
 updates:
 # standard:end dependabot
-  # repo-standard's own entry is the active one (spec 6.4): Dependabot moves the SHA and version
+  # repo-standard's own entry is the active one: Dependabot moves the SHA and version
   # comment of each action in the canonical workflows, and the next release carries them.
   - package-ecosystem: github-actions
     directory: /

@@ -1,6 +1,6 @@
 #!/bin/bash
 # changelog-entry of the repository standard: the same file in every repository; never edit it
-# here. In CI it checks the lines that a pull request adds to CHANGELOG.md (spec 3.8). It passes
+# here. In CI it checks the lines that a pull request adds to CHANGELOG.md. It passes
 # when they add a line under ## [Unreleased]; or a version heading, as a release pull request
 # does; or, from a branch fix/release-X.Y.Z-<slug>, a line in the section of X.Y.Z, as the fix of
 # a draft release does. A Dependabot pull request, by dependabot[bot] from a dependabot/ branch,

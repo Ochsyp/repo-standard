@@ -7,6 +7,13 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+### Added
+
+- `.github/standard/README.md` has a Rules section: the config, `standard-check`'s rules 1 to
+  10, the `ci/` interface, the workflow rules, the changelog and the secret scan. Comments and
+  messages that pointed to numbered sections of a document outside the repository now point there,
+  or name what they mean
+
 ### Changed
 
 - The README's status names 1.2.0 as published, with what it adds

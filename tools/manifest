@@ -1,6 +1,7 @@
 #!/bin/sh
 # tools/manifest of repo-standard: writes .github/standard/MANIFEST from the canonical files and
-# the bodies in blocks/ (the standard, section 2.5). It runs here only; it is not vendored.
+# the bodies in blocks/ (rules 2 to 4 in .github/standard/README.md). It runs here only; it is not
+# vendored.
 #   tools/manifest [--rev REV]          write .github/standard/MANIFEST to the work tree; without
 #                                       --rev, also rewrite the blocks in this repository's own
 #                                       documents from blocks/, in the variants its staged config
