@@ -13,6 +13,14 @@ Each version is the GitHub release `vX.Y.Z`.
 - `tools/sync --init` refuses a target whose `.github/standard.conf` is not committed, or differs
   from the committed one, since the hooks and `privacy-scan` read the config from HEAD. Commit
   the config on its own before the adoption's sync
+- The config template's starter value is `VISIBILITY=public`
+
+### Removed
+
+- `config/private-names` and its checks: `standard-check`'s rule 9 part in repo-standard,
+  `tools/sync`'s four refusals and `tools/status`'s `names` check. The denylists and the hooks
+  remain the guard for names that must never be written. `tools/sync` now runs from a release
+  clone without the file
 
 ## [1.2.0] - 2026-11-25
 

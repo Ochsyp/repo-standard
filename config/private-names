@@ -1,7 +1,0 @@
-# The private repositories of the standard (spec 2.2), one name per line. No vendored file or
-# block may name one: standard-check fails in CI when one does (rule 9), and tools/sync refuses
-# a release whose files, CHANGELOG line or pull request text would. Never vendored.
-image-backup
-jelly-stack
-kernel-updater
-portable-vm-launcher

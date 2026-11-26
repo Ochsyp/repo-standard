@@ -173,44 +173,15 @@ block_of() {
     [ "$(grep -c -v -E '^gh (api|release download) ' "$STUB_LOG")" -eq 0 ]
 }
 
-@test "sync refuses when a copy or the CHANGELOG line names a private repository" {
-    make_target NAME=example VISIBILITY=private RELEASE_KIND=legacy
-    run_sync --init --to "$TGT" --summary "work for example-private"
+@test "sync runs from a release clone without config/private-names" {
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=legacy
+    git -C "$SRC" rm -q --ignore-unmatch config/private-names
+    git -C "$SRC" -c core.hooksPath=no-hooks commit -q --allow-empty -m "chore: no private-names list"
+    git -C "$SRC" tag -f v1.0.0 > /dev/null
+    [ ! -e "$SRC/config/private-names" ]
+    run_sync --init --to "$TGT"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
-    make_target NAME=example VISIBILITY=private RELEASE_KIND=legacy
-    printf 'example-private\n' >> "$SRC/config/private-names"
-    git -C "$SRC" add config/private-names
-    git -C "$SRC" -c core.hooksPath=no-hooks commit -q -m "chore: one more name"
-    git -C "$SRC" tag -f v1.0.0 > /dev/null
-    run_sync --init --to "$TGT" --summary "work for example-private"
-    [ "$status" -eq 1 ]
-    [[ $stderr == *"the CHANGELOG line names a private repository"* ]]
-    [[ $stderr != *example-private* ]]
-    printf '# see example-private\n' >> "$SRC/.githooks/rules/disk"
-    git -C "$SRC" add .githooks/rules/disk
-    (cd "$SRC" && sh tools/manifest)
-    git -C "$SRC" add .github/standard/MANIFEST
-    git -C "$SRC" -c core.hooksPath=no-hooks commit -q -m "chore: a copy that names one"
-    git -C "$SRC" tag -f v1.0.0 > /dev/null
-    cp "$SRC/.github/standard/MANIFEST" "$STUB_GH/assets-v1.0.0/MANIFEST"
-    run_sync --init --to "$TGT"
-    [ "$status" -eq 1 ]
-    [[ $stderr == *".githooks/rules/disk names a private repository"* ]]
-    [ -z "$(git -C "$TGT" status --porcelain)" ]
-}
-
-@test "sync --init refuses a template that names a private repository, before it writes anything" {
-    make_target NAME=example VISIBILITY=private RELEASE_KIND=legacy
-    printf 'example-private\n' >> "$SRC/config/private-names"
-    printf 'Ask example-private.\n' >> "$SRC/templates/SECURITY.md"
-    git -C "$SRC" add config/private-names templates/SECURITY.md
-    git -C "$SRC" -c core.hooksPath=no-hooks commit -q -m "chore: a template that names one"
-    git -C "$SRC" tag -f v1.0.0 > /dev/null
-    run_sync --init --to "$TGT"
-    [ "$status" -eq 1 ]
-    [[ $stderr == *"templates/SECURITY.md names a private repository"* ]]
-    [[ $stderr != *example-private* ]]
-    [ -z "$(git -C "$TGT" status --porcelain)" ]
+    [[ $stderr != *private-names* ]]
 }
 
 @test "sync --init writes the copies with their modes, the blocks, the MANIFEST and the PR body" {
@@ -365,7 +336,7 @@ block_of() {
     git -C "$TGT" add -A
     git -C "$TGT" update-index --chmod=+x ci/test
     git -C "$TGT" -c core.hooksPath=no-hooks commit -q -m "chore: adopt the repository standard"
-    run --separate-stderr sh -c 'cd "$1" && EVENT=push BASE="$2" PRIVATE=true exec sh .github/standard/bin/standard-check --ci' \
+    run --separate-stderr sh -c 'cd "$1" && EVENT=push BASE="$2" PRIVATE=false exec sh .github/standard/bin/standard-check --ci' \
         sh "$TGT" "$ZERO"
     [ "$status" -eq 0 ] || { printf '%s\n%s\n' "$output" "$stderr" >&2; return 1; }
 }

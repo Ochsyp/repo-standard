@@ -41,8 +41,7 @@ repository it seals and pushes one tag to it.
 ## Data that stays private
 
 The denylists stay on the maintainer's machine. The hooks and the tools print counts and kinds,
-never a term or a matched value. `config/private-names` is never vendored, and no copy names a
-private repository.
+never a term or a matched value.
 
 <!-- standard:begin automated-checks -->
 ## Automated checks
