@@ -13,7 +13,7 @@ Each version is the GitHub release `vX.Y.Z`.
 - Neutral wording in the release steps, the seal tool's install, the release tools' comments and
   `tools/status`'s ruleset message, which now says "the ruleset differs from the standard one"
 - The releasing blocks say that the `release` workflow builds twice and compares only for a zip,
-  tar or stack release, as it does
+  tar or stack release
 - `tools/sync --init` refuses a target whose `.github/standard.conf` is not committed, or differs
   from the committed one, since the hooks and `privacy-scan` read the config from HEAD. Commit
   the config on its own before the adoption's sync

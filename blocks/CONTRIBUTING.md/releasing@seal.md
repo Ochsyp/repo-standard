@@ -31,4 +31,4 @@ it: hosts that install this repository's releases install a sealed release only.
    For a container image, the pre-release tick also moves `latest` back.
 
 Only the maintainer publishes a release. No one creates a release tag or a seal by hand, and no
-script or automation publishes, edits or deletes a release.
+script or automation publishes a release, or edits or deletes a published one.

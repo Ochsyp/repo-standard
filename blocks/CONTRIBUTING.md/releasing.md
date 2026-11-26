@@ -22,4 +22,4 @@ GitHub Actions builds each release, and the maintainer publishes it in the brows
    `latest` back.
 
 Only the maintainer publishes a release. No one creates a release tag by hand, and no script or
-automation publishes, edits or deletes a release.
+automation publishes a release, or edits or deletes a published one.
