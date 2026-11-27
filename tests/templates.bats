@@ -180,3 +180,17 @@ block_names() {
     grep -q -x '  "github_owned_allowed": false,' "$T/github/selected-actions.json"
     grep -q -x '  "verified_allowed": false,' "$T/github/selected-actions.json"
 }
+
+# A new pin in install-tools needs no edit in a repository's own PowerShell stages: the starters
+# read the versions from the copied install-tools, as repo-standard's own ci/test.ps1 does.
+@test "the PowerShell starters read their module versions from install-tools, and name none" {
+    local f
+    for f in "$T/ci/powershell/test.ps1" "$T/ci/powershell/lint.ps1"; do
+        ! grep -q -E 'RequiredVersion +[0-9]' "$f" ||
+            { printf '%s names a version\n' "$f" >&2; return 1; }
+        grep -q -F "'..\.github\standard\bin\install-tools'" "$f" ||
+            { printf '%s does not read install-tools\n' "$f" >&2; return 1; }
+    done
+    grep -q -F 'Get-Pin -Name PESTER' "$T/ci/powershell/test.ps1"
+    grep -q -F 'Get-Pin -Name PSSCRIPTANALYZER' "$T/ci/powershell/lint.ps1"
+}

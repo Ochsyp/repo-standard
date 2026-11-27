@@ -24,4 +24,5 @@
 
 ## Release contract
 
-<!-- The release's assets and archive layout, where it is installed, and what installers check. -->
+<!-- The release's assets and archive layout, where it is installed, and what installers check.
+Under SEAL=yes, also the hold: how the maintainer keeps a sealed release off the hosts. -->

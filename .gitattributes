@@ -23,8 +23,9 @@
 /.shellcheckrc export-ignore
 /CONTRIBUTING.md export-ignore
 # standard:end gitattributes
-# repo-standard's release tarball carries the canonical files, so the folders and files the block
-# keeps out of archives come back in here.
+# repo-standard's release tarball carries the canonical files, so the folders and .shellcheckrc,
+# which the block keeps out of archives, come back in here. .editorconfig, .gitattributes and
+# CONTRIBUTING.md stay out.
 /.github/ -export-ignore
 /.githooks/ -export-ignore
 /ci/ -export-ignore

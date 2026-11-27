@@ -166,7 +166,7 @@ has_line() {
     has_line source standard ok "the source of the standard, at 1.1.0-dev"
 }
 
-@test "settings: each wrong setting is a FAIL; extra allow-list entries warn before adoption and fail after" {
+@test "settings: each wrong setting is a FAIL; extra allow-list entries warn unadopted or legacy" {
     repo_ok example
     printf 'true\ttrue\ttrue\tfalse\tPR_TITLE\tPR_BODY\ttrue\ttrue\tenabled\tenabled\n' |
         gh_reply api "repos/$OWNER/example" --jq "$JQ_REPO"
@@ -194,6 +194,17 @@ has_line() {
     [ "$status" -eq 0 ]
     has_line other settings warn "until the adoption: example-owner/extra-action@*"
     [[ $output != *codeql* ]]
+    # A legacy release workflow may need actions that actions.allow lacks, until the release
+    # adoption: an extra entry is then a warn, not a FAIL.
+    repo_ok legacy
+    printf 'NAME=legacy\nVISIBILITY=private\nRELEASE_KIND=legacy\n' |
+        gh_reply api -H "$RAW" "repos/$OWNER/legacy/contents/.github/standard.conf?ref=main"
+    { sed -e '/^#/d' -e '/^$/d' "$SRC/.github/standard/actions.allow"
+        printf 'example-owner/extra-action@*\n'; } |
+        gh_reply api "repos/$OWNER/legacy/actions/permissions/selected-actions" --jq "$JQ_PATTERNS"
+    run_status --checks settings legacy
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    has_line legacy settings warn "while RELEASE_KIND=legacy: example-owner/extra-action@*"
 }
 
 @test "settings of a public repository: the standard ruleset exactly, secret scanning and push protection" {

@@ -13,12 +13,12 @@
 #   settings  immutable releases; a read-only workflow token that cannot approve pull requests;
 #             Dependabot alerts and security updates; squash merges only with PR_TITLE and
 #             COMMIT_MESSAGES, merged branches deleted, no auto-merge; GitHub's visibility equal to
-#             VISIBILITY; the Actions allow-list equal to actions.allow (temporary entries warn
-#             until the adoption; github/codeql-action may stay) with SHA pinning; for a public
-#             repository the standard ruleset exactly on main (one of its branch rulesets), secret
-#             scanning and push protection; where the config says SEAL=yes, a tag ruleset that
-#             keeps every login from deleting or moving refs/tags/seal/*, and none that blocks
-#             creating a seal
+#             VISIBILITY; the Actions allow-list equal to actions.allow (extra entries warn until
+#             the adoption and while RELEASE_KIND=legacy; github/codeql-action may stay) with SHA
+#             pinning; for a public repository the standard ruleset exactly on main (one of its
+#             branch rulesets), secret scanning and push protection; where the config says
+#             SEAL=yes, a tag ruleset that keeps every login from deleting or moving
+#             refs/tags/seal/*, and none that blocks creating a seal
 #   health    the last ci and secret-scan runs on main and the newest release's verify run are
 #             green; the weekly secret scan is active and ran in the last 8 days; no Dependabot
 #             pull request open more than 14 days; no draft waits to be published
@@ -436,7 +436,15 @@ check_settings() {
         pattern=$(LC_ALL=C comm -13 "$tmp/allow" "$tmp/$r.patterns" | { grep -v '^github/codeql-action' || true; } |
             paste -s -d ' ' -)
         if [[ -n $pattern ]]; then
-            if (( is_adopted )); then note FAIL "beyond actions.allow: $pattern"; else note warn "until the adoption: $pattern"; fi
+            # A legacy release workflow may need actions that actions.allow lacks, until the
+            # release adoption.
+            if (( ! is_adopted )); then
+                note warn "until the adoption: $pattern"
+            elif grep -q -x 'RELEASE_KIND=legacy' "$tmp/$r.conf" 2> /dev/null; then
+                note warn "while RELEASE_KIND=legacy: $pattern"
+            else
+                note FAIL "beyond actions.allow: $pattern"
+            fi
         fi
     else
         note FAIL "cannot read the Actions allow-list"

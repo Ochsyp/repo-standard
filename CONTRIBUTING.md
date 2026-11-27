@@ -234,15 +234,16 @@ automation publishes a release, or edits or deletes a published one.
 ## Release contract
 
 A release `vX.Y.Z` holds:
-- `repo-standard-X.Y.Z.tar.gz`, the tree at the tag with the manifest
+- `repo-standard-X.Y.Z.tar.gz`, the tree at the tag without `.editorconfig`, `.gitattributes`
+  and `CONTRIBUTING.md`, which `.gitattributes` keeps out of archives, and with the manifest
   `repo-standard-release.json` added;
 - the `MANIFEST` asset, byte for byte the `.github/standard/MANIFEST` of the tag;
 - the seal tool's `release-seal`, `release-seal-askpass` and `release-seal.ps1`, each byte for
   byte its file in `tools/` of the archive;
 - `SHA256SUMS`.
 
-`tools/sync` and `tools/status` trust a release only when it is published and immutable, and
-compare each MANIFEST with its asset.
+`tools/sync` trusts a release only when it is published and immutable. `tools/sync` and
+`tools/status` compare each MANIFEST with the release's `MANIFEST` asset.
 
 The seal tool runs on the maintainer's Windows PC, outside every clone. It needs Git for Windows
 (bash, git, ssh-keygen) and a logged-in `gh`. The maintainer installs or updates it only from a
