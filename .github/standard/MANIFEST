@@ -23,7 +23,7 @@ file    all      2862d99e304d411b863b54b91452f44d62749af2  100755  .github/stand
 file    all      93ed1e0fcaa7c45e17e9a0b4d78a3eefa9af269d  100755  .github/standard/bin/release-build
 file    all      bb7f1ce139499e4cf591772935eeb916168adf05  100755  .github/standard/bin/release-draft
 file    all      011516f4e0fe9f5b1cfb17e719579fb03ad3ac50  100755  .github/standard/bin/release-meta
-file    all      9e52559b74e24e290f787a603e10715ce8043b64  100755  .github/standard/bin/release-prepare
+file    all      cd030c99dcea29aae9549613dc1e0ac650fe4edb  100755  .github/standard/bin/release-prepare
 file    all      be7ebfffaea37ceca710ab077b2f1a22fdffd728  100755  .github/standard/bin/release-promote
 file    all      22d07ddae5d583537c2f27d52051c5bb76d7f53f  100755  .github/standard/bin/release-verify
 file    all      9014ed95df1a083e724d091582b6a3acd24f2ec7  100755  .github/standard/bin/run-stage
@@ -53,12 +53,12 @@ block   all      ee7eb51cc6cb0bc0cd314d1389b502f4c0448d4a  -       .gitattribute
 block   all      274acae589a5bfd19c6cac4932a2d3febcef4f78  -       .github/dependabot.yml#dependabot
 block   private  0349dd094a6e2a5cd1a32da9b18e1fbcdd2c8521  -       CONTRIBUTING.md#guard-rails@private
 block   public   b31d1289edaf556408e17bd0686cfbac6c44e6d8  -       CONTRIBUTING.md#guard-rails@public
-block   release  1c03cd6705ec9ff28045b3a47069d091de3d28ad  -       CONTRIBUTING.md#releasing
-block   seal     698fa0f8bf6a1bf9bba2ae58bac77e8c9f3701e2  -       CONTRIBUTING.md#releasing@seal
+block   release  ea5a98bfbd3229c6533854441b36b534c3d29075  -       CONTRIBUTING.md#releasing
+block   seal     49a5fa99dcc9ea20ae6056ad2752663453785dbc  -       CONTRIBUTING.md#releasing@seal
 block   all      50d5eb50402dbc4587f18afd0b144a026792a095  -       CONTRIBUTING.md#standard
 block   all      7e30f1be4881d0907233e745c8f8af887489bad1  -       CONTRIBUTING.md#workflow
 block   private  294a4f4990494de886e7c044bda468db8fa3f7d5  -       SECURITY.md#automated-checks@private
 block   public   5bf9c7d8c8bc839d2ac9d81e34837b384bfcb4f9  -       SECURITY.md#automated-checks@public
 block   private  c828e6428c3280d2da931787c7880ebadfd14b54  -       SECURITY.md#reporting@private
 block   public   cec24782757f5de75882626848f6ccf75c18a9cc  -       SECURITY.md#reporting@public
-block   seal     96bd7b9341ad915bab13739fb4743f87b356d9f1  -       SECURITY.md#sealed-releases@seal
+block   seal     9e100404ff14e8008abf1121e06dcd1380e43cac  -       SECURITY.md#sealed-releases@seal

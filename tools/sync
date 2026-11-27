@@ -22,8 +22,9 @@
 # .github/dependabot.yml gets the github-actions entry at limit 0. Last, it prints the pull
 # request text: the changed files and blocks, the MANIFEST's blob id and the CHANGELOG line.
 # --summary replaces the line's default summary. Paths of this machine are never printed.
-# After that text, --init prints on stderr what the adoption must still fix by hand. The notes
-# give line numbers and blob ids and never quote the repository's own text.
+# After that text, --init prints on stderr what the adoption must still fix by hand, and every
+# run notes a seal-only block left in a file where SEAL is not yes. The notes give line numbers
+# and blob ids and never quote the repository's own text.
 # Exit 0; 1 refused; 2 a step that cannot run; 64 usage.
 if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 set -euo pipefail
@@ -429,6 +430,26 @@ if (( init )); then
     else
         note "the sizes of the tracked files could not be read, so MAX_BLOB_KB was not compared."
     fi
+fi
+
+# A block that exists only as a seal variant, such as SECURITY.md's sealed-releases, stays
+# behind when SEAL is not yes, and standard-check refuses it there.
+if [[ $(conf SEAL) != yes ]]; then
+    while read -r target name; do
+        case $target in
+            *.md) begin="<!-- standard:begin $name -->" ;;
+            *) begin="# standard:begin $name" ;;
+        esac
+        [[ -f $dir/$target ]] || continue
+        grep -q -x -F -e "$begin" -e "$begin"$'\r' "$dir/$target" || continue
+        note "$target: the block $name is for SEAL=yes only. Delete it with its markers," \
+            "or standard-check fails."
+    done < <(awk '$1 == "block" && NF == 5 {
+            target = $5; sub(/#.*/, "", target); name = $5; sub(/^[^#]*#/, "", name)
+            sub(/@.*/, "", name)
+            if ($2 == "seal") seal[target " " name] = 1; else plain[target " " name] = 1
+        }
+        END { for (b in seal) if (!(b in plain)) print b }' "$manifest")
 fi
 
 # The pull request text, checked for the names too.

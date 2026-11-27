@@ -108,7 +108,7 @@ exemption and no accepted finding.
 
 GitHub Actions builds each release, and the maintainer publishes it in the browser.
 
-1. The maintainer opens the release pull request `chore/release-X.Y.Z`, written with
+1. The release pull request `chore/release-X.Y.Z` is written with
    `.github/standard/bin/release-prepare`: `VERSION`, the `VERSION_COPY` files, and the
    `CHANGELOG.md` section with its links. Its body names the dependency updates since the last
    release. CI checks the version, the date and the links. For a zip, tar or stack release, the

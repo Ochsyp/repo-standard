@@ -13,11 +13,19 @@ Each version is the GitHub release `vX.Y.Z`.
   every login from deleting or moving a `seal/*` tag (target tags, `refs/tags/seal/*`, the rules
   deletion and update, active, no bypass), and no active tag ruleset may block creating a seal.
   Otherwise the check fails (r38)
+- `tools/sync` notes a block that exists only as a seal variant, such as `SECURITY.md`'s
+  `sealed-releases`, when it stays in a repository whose config does not say `SEAL=yes`, since
+  `standard-check` refuses it there
 
 ### Changed
 
 - The `sealed-releases` and `releasing@seal` blocks say that a tag ruleset on GitHub enforces
   that a seal never moves and is never deleted, and how the maintainer sets it
+- A seal is optional for everyone but the maintainer: the `sealed-releases` and `releasing@seal`
+  blocks and the config template say that the maintainer's own hosts install sealed releases
+  only, and that anyone else downloads and installs a release without a seal
+- The `releasing` blocks' first step says that the release pull request is written with
+  `release-prepare`, not who opens it
 
 ## [1.3.1] - 2026-11-26
 
