@@ -7,6 +7,18 @@ Each version is the GitHub release `vX.Y.Z`.
 
 ## [Unreleased]
 
+### Added
+
+- `tools/status --checks settings`, where the config says `SEAL=yes`: a tag ruleset must keep
+  every login from deleting or moving a `seal/*` tag (target tags, `refs/tags/seal/*`, the rules
+  deletion and update, active, no bypass), and no active tag ruleset may block creating a seal.
+  Otherwise the check fails (r38)
+
+### Changed
+
+- The `sealed-releases` and `releasing@seal` blocks say that a tag ruleset on GitHub enforces
+  that a seal never moves and is never deleted, and how the maintainer sets it
+
 ## [1.3.1] - 2026-11-26
 
 ### Fixed

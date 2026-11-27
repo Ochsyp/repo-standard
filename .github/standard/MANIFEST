@@ -54,11 +54,11 @@ block   all      274acae589a5bfd19c6cac4932a2d3febcef4f78  -       .github/depen
 block   private  0349dd094a6e2a5cd1a32da9b18e1fbcdd2c8521  -       CONTRIBUTING.md#guard-rails@private
 block   public   b31d1289edaf556408e17bd0686cfbac6c44e6d8  -       CONTRIBUTING.md#guard-rails@public
 block   release  1c03cd6705ec9ff28045b3a47069d091de3d28ad  -       CONTRIBUTING.md#releasing
-block   seal     33ab7f15004049e5003dda763fab3dfbf34894c2  -       CONTRIBUTING.md#releasing@seal
+block   seal     698fa0f8bf6a1bf9bba2ae58bac77e8c9f3701e2  -       CONTRIBUTING.md#releasing@seal
 block   all      50d5eb50402dbc4587f18afd0b144a026792a095  -       CONTRIBUTING.md#standard
 block   all      7e30f1be4881d0907233e745c8f8af887489bad1  -       CONTRIBUTING.md#workflow
 block   private  294a4f4990494de886e7c044bda468db8fa3f7d5  -       SECURITY.md#automated-checks@private
 block   public   5bf9c7d8c8bc839d2ac9d81e34837b384bfcb4f9  -       SECURITY.md#automated-checks@public
 block   private  c828e6428c3280d2da931787c7880ebadfd14b54  -       SECURITY.md#reporting@private
 block   public   cec24782757f5de75882626848f6ccf75c18a9cc  -       SECURITY.md#reporting@public
-block   seal     774e2312ad2aa8658109db866b590b8f41a5bf94  -       SECURITY.md#sealed-releases@seal
+block   seal     96bd7b9341ad915bab13739fb4743f87b356d9f1  -       SECURITY.md#sealed-releases@seal
