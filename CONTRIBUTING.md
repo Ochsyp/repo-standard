@@ -98,13 +98,13 @@ repository's owner and name, the tag clone's folder and a folder of the maintain
 
 1. The maintainer's git setup (below) covers the repository's GitHub URL, so the hooks run in
    every clone of it.
-2. On `chore/standard-X.Y.Z` from an up-to-date `main`, write `.github/standard.conf` from
-   `templates/standard.conf`, check it with `sh TAG-CLONE/.github/standard/bin/conf --check
-   .github/standard.conf`, and commit it alone: the hooks read it from `HEAD`, and `--init`
-   refuses a config that is not committed.
-3. Clone the tag into a short temporary folder,
-   `git clone --depth 1 --branch vX.Y.Z https://github.com/OWNER/repo-standard.git TAG-CLONE`,
-   and run `sh TAG-CLONE/tools/sync --init --to .` from the repository's top.
+2. Clone the tag into a short temporary folder,
+   `git clone --depth 1 --branch vX.Y.Z https://github.com/OWNER/repo-standard.git TAG-CLONE`.
+3. On `chore/standard-X.Y.Z` from an up-to-date `main`, write `.github/standard.conf` from
+   `TAG-CLONE/templates/standard.conf`, check it with
+   `sh TAG-CLONE/.github/standard/bin/conf --check .github/standard.conf`, and commit it alone:
+   the hooks read it from `HEAD`, and `--init` refuses a config that is not committed. Then run
+   `sh TAG-CLONE/tools/sync --init --to .` from the repository's top.
 4. Read sync's notes: the lines that repeat a block, where an appended block goes, the
    `CHANGELOG.md` line, blobs above `MAX_BLOB_KB`, and what `standard-check`, `privacy-scan` and
    `release-meta` find in what sync staged. sync adds the dependabot `github-actions` entry at

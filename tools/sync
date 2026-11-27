@@ -18,9 +18,9 @@
 # markers in the file first. --init adopts a repository that has a config and no MANIFEST yet.
 # It refuses a config that is not committed or differs from HEAD's: the hooks read it from HEAD.
 # CONTRIBUTING.md and SECURITY.md come from templates/ where DIR has none. A block whose markers
-# a file lacks is added at the head of a configuration file, or at the end of a document. A
-# .github/dependabot.yml without a github-actions entry for / gets one at limit 0, right below
-# the block. Last, it prints the pull request text: the changed files and blocks, the MANIFEST's
+# a file lacks is added at the head of a configuration file, or at the end of a document. At the
+# adoption, a .github/dependabot.yml without a github-actions entry for / gets one at limit 0,
+# right below the block. Last, it prints the pull request text: the changed files and blocks, the MANIFEST's
 # blob id and the CHANGELOG line. --summary replaces the line's default summary. Paths of this
 # machine are never printed. After that text, --init prints on stderr what the adoption must still
 # fix by hand, then what the target's standard-check, privacy-scan and release-meta find in what
@@ -278,9 +278,11 @@ while read -r type profile oid _ path; do
     if (( created )) && [[ $target == .github/dependabot.yml ]]; then
         printf '%s\n' '  - package-ecosystem: github-actions' '    directory: /' '    schedule:' \
             '      interval: weekly' '    open-pull-requests-limit: 0' >> "$tmp/new"
-    elif [[ $target == .github/dependabot.yml && $(actions_limit "$tmp/new") == absent ]]; then
-        # An existing file without the entry gets it right below the block, where the block's
-        # updates list goes on; standard-check refuses the file without it.
+    elif (( init )) && [[ $target == .github/dependabot.yml &&
+        $(actions_limit "$tmp/new") == absent ]]; then
+        # At the adoption, an existing file without the entry gets it right below the block,
+        # where the block's updates list goes on; standard-check refuses the file without it. A
+        # later sync changes nothing outside the markers and keeps its note.
         END_LINE=$end awk '
             { print; line = $0; sub(/\r$/, "", line) }
             line == ENVIRON["END_LINE"] && !done {

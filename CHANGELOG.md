@@ -34,9 +34,9 @@ Each version is the GitHub release `vX.Y.Z`.
   only, and that anyone else downloads and installs a release without a seal
 - The `releasing` blocks' first step says that `release-prepare` writes the release pull
   request, not who opens it
-- `tools/sync` adds the dependabot `github-actions` entry at `open-pull-requests-limit: 0` to an
-  existing `.github/dependabot.yml` that lacks it, right below the block, instead of only noting
-  it
+- `tools/sync --init` adds the dependabot `github-actions` entry at `open-pull-requests-limit: 0`
+  to an existing `.github/dependabot.yml` that lacks it, right below the block, instead of only
+  noting it
 
 ### Fixed
 

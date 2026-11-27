@@ -503,3 +503,17 @@ own_lines() {
     [[ $stderr == *"sync: note: blob ${ghost:0:12} could not be read, so its size was not compared. Find its file with: git ls-files -s | grep ${ghost:0:12}"* ]]
     [[ $stderr != *large-name* && $stderr != *ghost-name* && $output != *"$short"* ]]
 }
+
+# Only the adoption adds the dependabot entry: a later sync changes nothing outside the markers.
+@test "a later sync leaves a dependabot.yml without the github-actions entry as it is" {
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    sed 's#OWNER/REPO#example-owner/example#' "$SRC/templates/CHANGELOG.md" > "$TGT/CHANGELOG.md"
+    sed -i '/^# standard:end dependabot$/q' "$TGT/.github/dependabot.yml"
+    commit_target "chore: adopt, without the entry"
+    run_sync --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(tail -n 1 "$TGT/.github/dependabot.yml")" = '# standard:end dependabot' ]
+    git -C "$TGT" diff --cached --quiet -- .github/dependabot.yml
+}
