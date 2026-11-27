@@ -298,6 +298,15 @@ block_of() {
     [ "$(block_of "$TGT/CONTRIBUTING.md" releasing)" = "$(cat "$SRC/blocks/CONTRIBUTING.md/releasing@seal.md")" ]
     [ "$(block_of "$TGT/SECURITY.md" sealed-releases)" = \
         "$(cat "$SRC/blocks/SECURITY.md/sealed-releases@seal.md")" ]
+    [[ $stderr != *"is for SEAL=yes only"* ]]
+    # Turning SEAL off again: the plain releasing block comes back, and the seal-only block that
+    # stays behind gets a note, since standard-check refuses it.
+    sed -i '/^SEAL=yes$/d' "$TGT/.github/standard.conf"
+    run_sync --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(block_of "$TGT/CONTRIBUTING.md" releasing)" = \
+        "$(cat "$SRC/blocks/CONTRIBUTING.md/releasing.md")" ]
+    [[ $stderr == *"sync: note: SECURITY.md: the block sealed-releases is for SEAL=yes only."* ]]
 }
 
 @test "sync deletes the files the release drops, and refuses a target that is repo-standard itself" {
