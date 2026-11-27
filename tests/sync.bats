@@ -388,7 +388,10 @@ own_lines() {
     [[ $at == "lines "* ]]
     # Deleting only the repeats would nest the entries under registries, so the note moves them.
     [[ $stderr == *"sync: note: .github/dependabot.yml: $at repeat the block's version or updates. Delete the repeated version and updates. Then put your entries directly below the block's end marker, and any other top-level key such as registries after them."* ]]
-    [[ $stderr == *"sync: note: .github/dependabot.yml: add a github-actions entry for / with open-pull-requests-limit: 0"* ]]
+    # The github-actions entry at limit 0 is sync's own work: it sits right below the block.
+    [[ $stderr == *"sync: note: .github/dependabot.yml: sync added the github-actions entry for / at open-pull-requests-limit: 0 below the block's end marker."* ]]
+    [ "$(grep -A 1 -x -F '# standard:end dependabot' "$TGT/.github/dependabot.yml" | tail -n 1)" = \
+        '  - package-ecosystem: github-actions' ]
     # A setting under another section is no repeat; only root and the section header are.
     at=$(own_lines "$TGT/.editorconfig" 'root = true' '[*]')
     [[ $stderr == *"sync: note: .editorconfig: $at repeat the block's root or a section header."* ]]
@@ -450,18 +453,35 @@ own_lines() {
     [[ $stderr != *"Our old"* && $output != *"note:"* ]]
 }
 
-@test "sync --init into a fresh repository notes only the CHANGELOG line; a later sync notes nothing" {
+@test "sync --init into a fresh repository notes the CHANGELOG line and the checks; sync then none" {
     local line='- Repository standard 1.0.0: adopted, with the hooks, checks, workflows and blocks.'
     make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
     run_sync --init --to "$TGT"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $stderr == *"sync: note: CHANGELOG.md: write it from templates/CHANGELOG.md, then add under ### Changed: $line"* ]]
-    [ "$(grep -c 'sync: note:' <<< "$stderr")" -eq 1 ]
+    # What sync cannot write, the checks name, and the checklist says how to do it.
+    [[ $stderr == *"sync: note: standard-check: ci/test or ci/test.ps1: missing (CI_STAGES lists test)"* ]]
+    [[ $stderr == *"sync: note: release-meta: VERSION is missing"* ]]
+    [[ $stderr == *"sync: note: repo-standard's CONTRIBUTING.md, Adopting a repository, lists the steps that are left"* ]]
     sed 's#OWNER/REPO#example-owner/example#' "$SRC/templates/CHANGELOG.md" > "$TGT/CHANGELOG.md"
     commit_target "chore: adopt"
     run_sync --to "$TGT"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
     [[ $stderr != *"note:"* ]]
+}
+
+# A first adoption ends with the target's own checks, so the owner sees at once what is left,
+# by place and kind and never by value.
+@test "sync --init relays what privacy-scan finds in the tracked files, by place and kind only" {
+    local ip
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar PRIVACY_RULES=base
+    ip=$(printf '%s.%s.%s.%s' 192 168 7 9)
+    printf 'host %s\n' "$ip" > "$TGT/notes.txt"
+    commit_target "docs: notes"
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: privacy-scan: notes.txt:1: ipv4-private"* ]]
+    [[ $stderr != *"$ip"* ]]
 }
 
 @test "sync --init names tracked blobs by id against HEAD's limit, and says when one is unreadable" {
@@ -482,4 +502,28 @@ own_lines() {
     [[ $stderr != *"blob $at_limit"* ]]
     [[ $stderr == *"sync: note: blob ${ghost:0:12} could not be read, so its size was not compared. Find its file with: git ls-files -s | grep ${ghost:0:12}"* ]]
     [[ $stderr != *large-name* && $stderr != *ghost-name* && $output != *"$short"* ]]
+}
+
+# Only the adoption adds the dependabot entry: a later sync changes nothing outside the markers.
+@test "a later sync leaves a dependabot.yml without the github-actions entry as it is" {
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    sed 's#OWNER/REPO#example-owner/example#' "$SRC/templates/CHANGELOG.md" > "$TGT/CHANGELOG.md"
+    sed -i '/^# standard:end dependabot$/q' "$TGT/.github/dependabot.yml"
+    commit_target "chore: adopt, without the entry"
+    run_sync --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [ "$(tail -n 1 "$TGT/.github/dependabot.yml")" = '# standard:end dependabot' ]
+    git -C "$TGT" diff --cached --quiet -- .github/dependabot.yml
+}
+
+# In Actions the checks write their problems as annotations; the relayed notes stay plain text,
+# the same wherever sync runs.
+@test "sync --init relays the checks as plain notes, also where GITHUB_ACTIONS is true" {
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    GITHUB_ACTIONS=true run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: release-meta: VERSION is missing"* ]]
+    [[ $stderr != *"::error::"* && $stderr != *"::notice::"* ]]
 }

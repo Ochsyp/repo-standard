@@ -89,6 +89,106 @@ Every value in a test is synthetic: `example.invalid`, `example-owner`, `192.0.2
 fragments at run time, so no file holds one whole. The config enables the `base` pack, with no
 exemption and no accepted finding.
 
+## Adopting a repository
+
+A repository adopts the standard once, in one pull request on a branch `chore/standard-X.Y.Z`,
+from a clone of the published tag `vX.Y.Z`. `tools/sync --init` writes what it can and its notes
+name the rest; these steps cover both. `OWNER`, `NAME`, `TAG-CLONE` and `PATH-TO` stand for the
+repository's owner and name, the tag clone's folder and a folder of the maintainer's machine.
+
+1. The maintainer's git setup (below) covers the repository's GitHub URL, so the hooks run in
+   every clone of it.
+2. Clone the tag into a short temporary folder,
+   `git clone --depth 1 --branch vX.Y.Z https://github.com/OWNER/repo-standard.git TAG-CLONE`.
+3. On `chore/standard-X.Y.Z` from an up-to-date `main`, write `.github/standard.conf` from
+   `TAG-CLONE/templates/standard.conf`, check it with
+   `sh TAG-CLONE/.github/standard/bin/conf --check .github/standard.conf`, and commit it alone:
+   the hooks read it from `HEAD`, and `--init` refuses a config that is not committed. Then run
+   `sh TAG-CLONE/tools/sync --init --to .` from the repository's top.
+4. Read sync's notes: the lines that repeat a block, where an appended block goes, the
+   `CHANGELOG.md` line, blobs above `MAX_BLOB_KB`, and what `standard-check`, `privacy-scan` and
+   `release-meta` find in what sync staged. sync adds the dependabot `github-actions` entry at
+   `open-pull-requests-limit: 0` itself; the repository's own entries go below it.
+5. Write what only the repository knows:
+   - `ci/<stage>` for each stage in `CI_STAGES`, from `templates/ci/<stack>/`;
+   - `tests/helpers.bash` from `templates/tests/helpers.bash`, so the tests source the standard's
+     `lib.bash` first;
+   - a root `VERSION` (`X.Y.Z` or `X.Y.Z-dev`; `VERSION_COPY` keeps other copies equal), and
+     `CHANGELOG.md` in the form of `templates/CHANGELOG.md` with sync's line under `### Changed`;
+   - the sections of `CONTRIBUTING.md` and `SECURITY.md` around the blocks, in the order that
+     `templates/` shows, and the README's text about the repository's CI.
+6. Delete what the standard replaces:
+   - files in `.githooks/`, `.github/standard/` and `.github/workflows/` that the MANIFEST does not
+     list, an old `tests.yml` among them, and `.gitleaks.toml`;
+   - the repository's own tests of an older privacy scan;
+   - lines of `.gitattributes` and `.editorconfig` that repeat a block.
+7. Test values go into the synthetic ranges of Test data in the repository's `CONTRIBUTING.md`
+   (`192.0.2.x`, `example-`, `*.invalid`, `5ca1ab1e`), or are built from fragments at run time.
+   A real value is replaced, never accepted.
+8. Run until clean: `sh .github/standard/bin/standard-check --local`,
+   `sh .githooks/privacy-scan --tracked`, `git tag -l 'v*' | bash .github/standard/bin/release-meta
+   check`, and the repository's own tests. Then commit, push and open the pull request; CI must
+   pass.
+9. After the merge, the maintainer applies the GitHub settings that `tools/status` checks, one
+   `gh` line each:
+   - `gh api --method PATCH repos/OWNER/NAME -F allow_squash_merge=true -F allow_merge_commit=false
+     -F allow_rebase_merge=false -f squash_merge_commit_title=PR_TITLE -f
+     squash_merge_commit_message=COMMIT_MESSAGES -F delete_branch_on_merge=true -F
+     allow_auto_merge=false`
+   - `gh api --method PUT repos/OWNER/NAME/actions/permissions/workflow -f
+     default_workflow_permissions=read -F can_approve_pull_request_reviews=false`
+   - `gh api --method PUT repos/OWNER/NAME/immutable-releases`
+   - `gh api --method PUT repos/OWNER/NAME/vulnerability-alerts`
+   - `gh api --method PUT repos/OWNER/NAME/automated-security-fixes`
+   - `gh api --method PUT repos/OWNER/NAME/actions/permissions -F enabled=true -f
+     allowed_actions=selected -F sha_pinning_required=true`
+   - `gh api --method PUT repos/OWNER/NAME/actions/permissions/selected-actions --input
+     TAG-CLONE/templates/github/selected-actions.json`
+   - a public repository only: `gh api --method PATCH repos/OWNER/NAME -f
+     'security_and_analysis[secret_scanning][status]=enabled' -f
+     'security_and_analysis[secret_scanning_push_protection][status]=enabled'`
+   - a public repository only: `gh api --method POST repos/OWNER/NAME/rulesets --input
+     TAG-CLONE/templates/github/ruleset.json`
+10. A repository that seals does so only once it is public, in this order: the repository is
+    public; the tag ruleset, `gh api --method POST repos/OWNER/NAME/rulesets --input
+    TAG-CLONE/templates/github/seal-ruleset.json`; then `SEAL=yes` in a `chore/standard-X.Y.Z`
+    pull request. `conf` refuses `SEAL=yes` in a private repository.
+11. `tools/status` reads the repository, with `--clones NAME=CLONE` for the maintainer's clone;
+    every line should say `ok`. Delete the tag clone.
+
+### The maintainer's git setup
+
+The hooks and the denylists come from the maintainer's global git configuration, never from a
+repository. One included file holds the settings:
+
+```
+[core]
+    hooksPath = .githooks
+[privacy]
+    requireDenylist = true
+    denylist = PATH-TO/denylist
+```
+
+The denylist is a file of fixed terms, one per line, that never leaves the machine. The global
+configuration loads the included file for each repository of the standard, with one line for
+each form of its GitHub URL:
+
+```
+[includeIf "hasconfig:remote.*.url:https://github.com/OWNER/NAME.git"]
+    path = PATH-TO/standard.gitconfig
+[includeIf "hasconfig:remote.*.url:https://github.com/OWNER/NAME"]
+    path = PATH-TO/standard.gitconfig
+[includeIf "hasconfig:remote.*.url:git@github.com:OWNER/NAME.git"]
+    path = PATH-TO/standard.gitconfig
+[includeIf "hasconfig:remote.*.url:git@github.com:OWNER/NAME"]
+    path = PATH-TO/standard.gitconfig
+```
+
+`git config --global 'includeIf.hasconfig:remote.*.url:https://github.com/OWNER/NAME.git.path'
+PATH-TO/standard.gitconfig` writes the first; the other three follow the same way.
+`tools/status --clones` checks each clone: the hooks on, `privacy.requireDenylist` on, the
+includeIf lines, and the number of denylist terms, never a term.
+
 ## Changing the standard
 
 1. A change is a pull request here, from a branch off `main`, with a CHANGELOG line, the tests

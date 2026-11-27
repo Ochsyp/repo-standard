@@ -17,7 +17,9 @@ sync.
 
 `tools/sync` of repo-standard, run from a clone at a published release, writes that release's
 copies and blocks into this repository on a branch `chore/standard-X.Y.Z` and prints the pull
-request text. That pull request changes nothing else.
+request text. That pull request changes nothing else. A first adoption runs `tools/sync --init`;
+repo-standard's `CONTRIBUTING.md`, Adopting a repository, lists every step and the GitHub
+settings.
 
 ## Test
 

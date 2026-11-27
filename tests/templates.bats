@@ -155,3 +155,28 @@ block_names() {
     done < <(git -C "$REPO_ROOT" ls-files -- 'templates/*.ps1')
     (( count >= 2 ))
 }
+
+# The GitHub settings an adoption applies with gh come as files. Each must give exactly the line
+# tools/status wants, so a file and the audit cannot drift apart. tools/status reads GitHub's
+# replies with gh's own jq, which only reads API replies, so this test pins the files instead.
+@test "the ruleset templates give exactly the lines tools/status wants" {
+    need command jq
+    STATUS_LIB=1 source "$REPO_ROOT/tools/status"
+    run jq -r "$JQ_RULESET" "$T/github/ruleset.json"
+    [ "$status" -eq 0 ]
+    [ "$output" == "$STANDARD_RULESET" ] ||
+        { printf 'got:  %q\nwant: %q\n' "$output" "$STANDARD_RULESET" >&2; return 1; }
+    run jq -r "$JQ_TAG_RULESET" "$T/github/seal-ruleset.json"
+    [ "$status" -eq 0 ]
+    [ "$output" == "$SEAL_RULESET" ] ||
+        { printf 'got:  %q\nwant: %q\n' "$output" "$SEAL_RULESET" >&2; return 1; }
+    [ "$(jq -r .target "$T/github/ruleset.json")" = branch ]
+    [ "$(jq -r .target "$T/github/seal-ruleset.json")" = tag ]
+}
+
+@test "the allow-list template lists exactly actions.allow, and no GitHub-owned or verified one" {
+    diff <(sed -e '/^#/d' -e '/^$/d' "$REPO_ROOT/.github/standard/actions.allow") \
+        <(sed -n 's/^    "\([^"]*\)",\{0,1\}$/\1/p' "$T/github/selected-actions.json")
+    grep -q -x '  "github_owned_allowed": false,' "$T/github/selected-actions.json"
+    grep -q -x '  "verified_allowed": false,' "$T/github/selected-actions.json"
+}

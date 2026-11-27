@@ -16,6 +16,14 @@ Each version is the GitHub release `vX.Y.Z`.
 - `tools/sync` notes a block that exists only as a seal variant, such as `SECURITY.md`'s
   `sealed-releases`, when it stays in a repository whose config does not say `SEAL=yes`, since
   `standard-check` refuses it there
+- repo-standard's `CONTRIBUTING.md` has "Adopting a repository": every step of a first adoption,
+  the GitHub settings as one `gh` line each, the order for a repository that seals (public, tag
+  ruleset, `SEAL=yes`), and the maintainer's git setup with its includeIf lines
+- `templates/github/ruleset.json`, `seal-ruleset.json` and `selected-actions.json`: the branch
+  ruleset, the seal-tag ruleset and the Actions allow-list as files for `gh api --input`. Tests
+  hold them to the lines `tools/status` wants and to `actions.allow`
+- `tools/sync --init` ends with the target's own `standard-check`, `privacy-scan` and
+  `release-meta`, run on what it staged, and relays what they find as notes, by place and kind
 
 ### Changed
 
@@ -26,6 +34,9 @@ Each version is the GitHub release `vX.Y.Z`.
   only, and that anyone else downloads and installs a release without a seal
 - The `releasing` blocks' first step says that `release-prepare` writes the release pull
   request, not who opens it
+- `tools/sync --init` adds the dependabot `github-actions` entry at `open-pull-requests-limit: 0`
+  to an existing `.github/dependabot.yml` that lacks it, right below the block, instead of only
+  noting it
 
 ### Fixed
 
