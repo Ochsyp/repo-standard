@@ -15,14 +15,17 @@
 #             COMMIT_MESSAGES, merged branches deleted, no auto-merge; GitHub's visibility equal to
 #             VISIBILITY; the Actions allow-list equal to actions.allow (temporary entries warn
 #             until the adoption; github/codeql-action may stay) with SHA pinning; for a public
-#             repository the standard ruleset exactly, secret scanning and push protection; where
-#             the config says SEAL=yes, a tag ruleset that keeps every login from deleting or
-#             moving refs/tags/seal/*, and none that blocks creating a seal
+#             repository the standard ruleset exactly on main (one of its branch rulesets), secret
+#             scanning and push protection; where the config says SEAL=yes, a tag ruleset that
+#             keeps every login from deleting or moving refs/tags/seal/*, and none that blocks
+#             creating a seal
 #   health    the last ci and secret-scan runs on main and the newest release's verify run are
-#             green; no Dependabot pull request open more than 14 days; no draft waits to be
-#             published
-#   history   commits on main since the adoption that GitHub's web-flow did not make and that no
-#             pull request merged into main brought in: a direct push, by short SHA only
+#             green; the weekly secret scan is active and ran in the last 8 days; no Dependabot
+#             pull request open more than 14 days; no draft waits to be published
+#   history   commits on main since the adoption that no pull request merged into main brought
+#             in: a direct push, by short SHA only. Where the config says VISIBILITY=public,
+#             GitHub's own signed commits pass without a lookup, since the ruleset blocks direct
+#             pushes there
 #   seal      only where the config on main says SEAL=yes: the newest published release that is
 #             not a pre-release and that github-actions[bot] drafted has its seal/vX.Y.Z, else a
 #             warn for 24 hours after the publish and a FAIL from then on; each seal is an
@@ -45,6 +48,8 @@ RAW='Accept: application/vnd.github.raw'
 JQ_SHA='.sha'
 JQ_TAG='.tag_name'
 JQ_RUN='.workflow_runs[0].conclusion // "none"'
+JQ_STATE='.state'
+JQ_SCHEDULED='.workflow_runs[0].created_at // ""'
 JQ_DATES='.[].commit.committer.date'
 JQ_DIRECT='.[] | [.sha, (.committer.login // ""), (.commit.verification.verified // false)] | @tsv'
 JQ_MERGED='[.[] | select(.merged_at != null and .base.ref == "main")] | length'
@@ -57,7 +62,7 @@ JQ_PATTERNS='.patterns_allowed[]'
 JQ_RULESETS='.[] | select(.target == "branch") | .id'
 # The policy and the review count become text before first // "", since jq's // replaces
 # false as well as null.
-JQ_RULESET='[.enforcement, (.bypass_actors | length), ([.rules[].type] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | "\(.context):\(.integration_id)"] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.strict_required_status_checks_policy | tostring] | first // ""), ([.rules[] | select(.type == "pull_request") | .parameters.required_approving_review_count | tostring] | first // "")] | @tsv'
+JQ_RULESET='[.enforcement, (.bypass_actors | length), ([.rules[].type] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | "\(.context):\(.integration_id)"] | sort | join(",")), ([.rules[] | select(.type == "required_status_checks") | .parameters.strict_required_status_checks_policy | tostring] | first // ""), ([.rules[] | select(.type == "pull_request") | .parameters.required_approving_review_count | tostring] | first // ""), ((.conditions.ref_name.include // []) | sort | join(",")), ((.conditions.ref_name.exclude // []) | sort | join(","))] | @tsv'
 JQ_TAG_RULESETS='.[] | select(.target == "tag") | .id'
 JQ_TAG_RULESET='[.enforcement, (.bypass_actors | length), ([.rules[].type] | sort | join(",")), ((.conditions.ref_name.include // []) | sort | join(",")), ((.conditions.ref_name.exclude // []) | sort | join(","))] | @tsv'
 JQ_DEPENDABOT='.[] | select(.user.login == "dependabot[bot]") | [.number, .created_at[0:10]] | @tsv'
@@ -74,8 +79,9 @@ JQ_OBJECT='[.object.type, .object.sha] | @tsv'
 JQ_SEAL='[.object.type, .object.sha, (.message | split("\n") | .[0])] | @tsv'
 # The tag ruleset of a repository that seals: deletion and update of every seal, for every login.
 SEAL_RULESET=$'active\t0\tdeletion,update\trefs/tags/seal/*\t'
-# The standard ruleset of a public repository after its adoption.
-STANDARD_RULESET=$'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368,scan:15368\tfalse\t0'
+# The standard ruleset of a public repository after its adoption, on main. ~DEFAULT_BRANCH,
+# GitHub's name for the default branch, targets main as well.
+STANDARD_RULESET=$'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368,scan:15368\tfalse\t0\trefs/heads/main\t'
 
 # Run gh read-only: gh api with GET and no field, since a field makes it POST, or gh release
 # download. Anything else returns 97 before gh runs.
@@ -335,6 +341,26 @@ check_tag_rulesets() {
     return 0
 }
 
+# The branch rulesets of $1 as OWNER/NAME, one JQ_RULESET line each; nothing when none can be read.
+branch_rulesets() {
+    local id
+    while IFS= read -r id; do
+        [[ -n $id ]] || continue
+        ghr api "repos/$1/rulesets/$id" --jq "$JQ_RULESET" 2> /dev/null || true
+    done < <(ghr api "repos/$1/rulesets" --jq "$JQ_RULESETS" 2> /dev/null || true)
+}
+
+# Whether one of the ruleset lines $1 is the standard ruleset, on main or the default branch.
+standard_ruleset_in() {
+    local line
+    while IFS= read -r line; do
+        [[ $line == "$STANDARD_RULESET" ]] && return 0
+        line=${line/$'\t~DEFAULT_BRANCH\t'/$'\trefs/heads/main\t'}
+        [[ $line == "$STANDARD_RULESET" ]] && return 0
+    done <<< "$1"
+    return 1
+}
+
 check_settings() {
     local r=$1 s=$owner/$1 is_adopted=0 vis='' v private squash merge rebase title message delete auto
     local scanning push token approve enabled allowed pinning owned verified rules id pattern
@@ -361,14 +387,16 @@ check_settings() {
         if [[ $private == false ]]; then
             [[ $scanning == enabled ]] || note FAIL "secret scanning is off"
             [[ $push == enabled ]] || note FAIL "push protection is off"
-            rules=''
-            id=$(ghr api "repos/$s/rulesets" --jq "$JQ_RULESETS" 2> /dev/null | head -n 1) || id=''
-            [[ -z $id ]] || rules=$(ghr api "repos/$s/rulesets/$id" --jq "$JQ_RULESET" 2> /dev/null) || rules=''
+            # Every branch ruleset is read: one that targets main must be the standard's.
+            rules=$(branch_rulesets "$s")
             if [[ -z $rules ]]; then
                 note FAIL "no branch ruleset"
             elif (( is_adopted )); then
-                [[ $rules == "$STANDARD_RULESET" ]] || note FAIL "the ruleset differs from the standard one"
-            elif [[ $(cut -f 3 <<< "$rules") != *deletion*non_fast_forward* ]]; then
+                standard_ruleset_in "$rules" ||
+                    note FAIL "the ruleset differs from the standard one"
+            elif ! awk -F '\t' '$3 ~ /deletion/ && $3 ~ /non_fast_forward/ &&
+                ($7 == "refs/heads/main" || $7 == "~DEFAULT_BRANCH") { ok = 1 } END { exit !ok }' \
+                <<< "$rules"; then
                 note FAIL "the ruleset does not block deletion and force pushes"
             fi
         fi
@@ -425,6 +453,19 @@ check_health() {
         done
         v=$(ghr api "repos/$s/actions/workflows/release.yml/runs?event=release&per_page=1" --jq "$JQ_RUN" 2> /dev/null) || v=none
         [[ $v == success || $v == none ]] || note FAIL "verify of the newest release ended with $v"
+        # GitHub switches a schedule off after 60 days without activity, and the last push run
+        # stays green, so the weekly history scan is read on its own.
+        workflow=repos/$s/actions/workflows/secret-scan.yml
+        v=$(ghr api "$workflow" --jq "$JQ_STATE" 2> /dev/null) || v=unreadable
+        [[ $v == active ]] || note FAIL "the weekly secret scan is $v"
+        if ! v=$(ghr api "$workflow/runs?event=schedule&per_page=1" --jq "$JQ_SCHEDULED" 2> /dev/null)
+        then
+            note FAIL "cannot read the weekly secret scan's runs"
+        elif [[ -z $v ]]; then
+            note warn "no weekly secret scan has run yet"
+        elif (( $(days "${v:0:10}" "$today") > 8 )); then
+            note FAIL "the last weekly secret scan ran $(days "${v:0:10}" "$today") days ago"
+        fi
     fi
     while IFS=$'\t' read -r number created; do
         [[ -n $number ]] || continue
@@ -438,7 +479,7 @@ check_health() {
 }
 
 check_history() {
-    local r=$1 s=$owner/$1 since rows sha login verified merged direct='' unknown=''
+    local r=$1 s=$owner/$1 since rows sha login verified merged direct='' unknown='' strict=1
     since=$(ghr api --paginate "repos/$s/commits?sha=main&path=.github/standard/MANIFEST&per_page=100" \
         --jq "$JQ_DATES" 2> /dev/null | tail -n 1) || since=''
     if [[ -z $since ]]; then
@@ -449,12 +490,18 @@ check_history() {
     # signature on it verifies. A committer set to web-flow by hand has no such signature. A merge
     # commit also brings its branch's own commits onto main, committed by their author: one GET per
     # such commit asks whether a pull request merged into main brought it in. A direct push has
-    # none, and a GET that fails accepts nothing.
+    # none, and a GET that fails accepts nothing. A private repository has no ruleset, so an edit
+    # made in the browser straight on main is web-flow's signed commit too: there every commit
+    # needs its merged pull request. Only a config that says VISIBILITY=public skips web-flow's.
+    if fetch "$s" .github/standard.conf "$tmp/$r.history.conf" &&
+        grep -q -x 'VISIBILITY=public' "$tmp/$r.history.conf"; then
+        strict=0
+    fi
     if rows=$(ghr api --paginate "repos/$s/commits?sha=main&since=$since&per_page=100" \
         --jq "$JQ_DIRECT" 2> /dev/null); then
         while IFS=$'\t' read -r sha login verified; do
             [[ -n $sha ]] || continue
-            [[ $login == web-flow && $verified == true ]] && continue
+            if (( ! strict )) && [[ $login == web-flow && $verified == true ]]; then continue; fi
             if merged=$(ghr api "repos/$s/commits/$sha/pulls" --jq "$JQ_MERGED" 2> /dev/null); then
                 [[ $merged =~ ^[1-9][0-9]*$ ]] && continue
                 direct+=" ${sha:0:7}"

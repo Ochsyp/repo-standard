@@ -27,6 +27,27 @@ Each version is the GitHub release `vX.Y.Z`.
 - The `releasing` blocks' first step says that `release-prepare` writes the release pull
   request, not who opens it
 
+### Fixed
+
+- A config without a `PRIVACY_RULES` line runs the `base` pack: `conf` defaults it to `base`, so
+  leaving the line out no longer turns every rule pack off. An empty value still turns them off,
+  in a `chore/privacy-*` pull request of its own
+- `tools/status --checks settings` reads every branch ruleset and its target: one must be the
+  standard ruleset on `refs/heads/main` or `~DEFAULT_BRANCH`. A ruleset with the right rules on
+  another branch no longer passes
+- `tools/status --checks history` looks up the pull request of GitHub's own commits too, where
+  the config does not say `VISIBILITY=public`: without a ruleset, an edit made in the browser on
+  `main` is such a commit
+- `ci.yml` runs again when a pull request's title or body is edited, since the title becomes the
+  squash commit's message
+- `conf --check` refuses `RELEASE_KIND=image` without `IMAGE_PLATFORMS`, which would push an
+  image that CI never smoke-tested
+- `conf --check` refuses `SEAL=yes` with `VISIBILITY=private`: a private repository's plan
+  offers no tag ruleset to protect the seals. Make the repository public first, or keep `SEAL`
+  off
+- `tools/status --checks health` fails when the weekly secret scan is no longer active or has not
+  run for more than 8 days, and warns before its first run
+
 ## [1.3.1] - 2026-11-26
 
 ### Fixed
