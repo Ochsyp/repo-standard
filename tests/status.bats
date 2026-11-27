@@ -72,6 +72,10 @@ repo_ok() {
         printf 'success\n' | gh_reply api "repos/$r/actions/workflows/ci.yml/runs?branch=main&per_page=1" --jq "$JQ_RUN"
         printf 'success\n' | gh_reply api "repos/$r/actions/workflows/secret-scan.yml/runs?branch=main&per_page=1" --jq "$JQ_RUN"
         printf 'success\n' | gh_reply api "repos/$r/actions/workflows/release.yml/runs?event=release&per_page=1" --jq "$JQ_RUN"
+        local w="repos/$r/actions/workflows/secret-scan.yml"
+        printf 'active\n' | gh_reply api "$w" --jq "$JQ_STATE"
+        printf '2026-11-09T05:41:00Z\n' |
+            gh_reply api "$w/runs?event=schedule&per_page=1" --jq "$JQ_SCHEDULED"
         printf '2026-11-01T10:00:00Z\n' | gh_reply api --paginate "repos/$r/commits?sha=main&path=.github/standard/MANIFEST&per_page=100" --jq "$JQ_DATES"
         : | gh_reply api --paginate "repos/$r/commits?sha=main&since=2026-11-01T10:00:00Z&per_page=100" --jq "$JQ_DIRECT"
     else
@@ -89,7 +93,7 @@ repo_ok() {
     sed -e '/^#/d' -e '/^$/d' "$SRC/.github/standard/actions.allow" |
         gh_reply api "repos/$r/actions/permissions/selected-actions" --jq "$JQ_PATTERNS"
     printf '7\n' | gh_reply api "repos/$r/rulesets" --jq "$JQ_RULESETS"
-    printf 'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368,scan:15368\tfalse\t0\n' |
+    printf 'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks\tall-passed:15368,scan:15368\tfalse\t0\trefs/heads/main\t\n' |
         gh_reply api "repos/$r/rulesets/7" --jq "$JQ_RULESET"
     : | gh_reply api --paginate "repos/$r/pulls?state=open&per_page=100" --jq "$JQ_DEPENDABOT"
     : | gh_reply api --paginate "repos/$r/releases?per_page=100" --jq "$JQ_DRAFTS"
@@ -216,7 +220,8 @@ has_line() {
 @test "settings: the ruleset filter turns GitHub's standard ruleset into the standard line" {
     local ruleset
     need command jq
-    ruleset='{"enforcement":"active","bypass_actors":[],"rules":[{"type":"deletion"},
+    ruleset='{"enforcement":"active","bypass_actors":[],
+        "conditions":{"ref_name":{"include":["refs/heads/main"],"exclude":[]}},"rules":[{"type":"deletion"},
         {"type":"non_fast_forward"},{"type":"pull_request","parameters":
         {"required_approving_review_count":0}},{"type":"required_status_checks","parameters":
         {"strict_required_status_checks_policy":false,"required_status_checks":
@@ -228,6 +233,28 @@ has_line() {
         { printf 'got:  %q\nwant: %q\n' "$output" "$STANDARD_RULESET" >&2; return 1; }
     run jq -r "$JQ_RULESET" <<< "${ruleset/:false,/:true,}"
     [[ $output == *$'\ttrue\t0' ]]
+}
+
+# A ruleset with the right rules protects nothing when it targets another branch. Every branch
+# ruleset is read, and one that is the standard's for main, or for the default branch, will do.
+@test "settings: the branch ruleset must target main; any one of several may be the standard's" {
+    local r="repos/$OWNER/example" std
+    std=$'active\t0\tdeletion,non_fast_forward,pull_request,required_status_checks'
+    std+=$'\tall-passed:15368,scan:15368\tfalse\t0'
+    VIS=public repo_ok example
+    printf '%s\n' "$std"$'\trefs/heads/other\t' | gh_reply api "$r/rulesets/7" --jq "$JQ_RULESET"
+    run_status --checks settings example
+    [ "$status" -eq 1 ]
+    has_line example settings FAIL "the ruleset differs from the standard one"
+    printf '%s\n' "$std"$'\t~DEFAULT_BRANCH\t' | gh_reply api "$r/rulesets/7" --jq "$JQ_RULESET"
+    run_status --checks settings example
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    printf '7\n8\n' | gh_reply api "$r/rulesets" --jq "$JQ_RULESETS"
+    printf '%s\n' "$std"$'\trefs/heads/other\t' | gh_reply api "$r/rulesets/7" --jq "$JQ_RULESET"
+    printf '%s\n' "$std"$'\trefs/heads/main\t' | gh_reply api "$r/rulesets/8" --jq "$JQ_RULESET"
+    run_status --checks settings example
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    has_line example settings ok
 }
 
 # A repository that seals (SEAL=yes) needs a tag ruleset that refuses to delete or move any seal,
@@ -315,8 +342,41 @@ has_line() {
     [[ $output != *"#13"* ]]
 }
 
-@test "history: a commit on main that GitHub did not make and sign is a FAIL, by short SHA only" {
+# GitHub switches a schedule off after 60 days without activity; the last push run stays green.
+@test "health: the weekly secret scan must be active and have run in the last 8 days" {
+    local w="repos/$OWNER/example/actions/workflows/secret-scan.yml"
     repo_ok example
+    printf 'disabled_inactivity\n' | gh_reply api "$w" --jq "$JQ_STATE"
+    printf '2026-10-05T05:41:00Z\n' |
+        gh_reply api "$w/runs?event=schedule&per_page=1" --jq "$JQ_SCHEDULED"
+    run_status --checks health example
+    [ "$status" -eq 1 ]
+    has_line example health FAIL "the weekly secret scan is disabled_inactivity"
+    has_line example health FAIL "the last weekly secret scan ran 39 days ago"
+    printf 'active\n' | gh_reply api "$w" --jq "$JQ_STATE"
+    : | gh_reply api "$w/runs?event=schedule&per_page=1" --jq "$JQ_SCHEDULED"
+    run_status --checks health example
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; return 1; }
+    has_line example health warn "no weekly secret scan has run yet"
+}
+
+# A private repository has no ruleset, so a commit made in the browser straight on main is
+# GitHub's own and signed: there web-flow's commits need a merged pull request too.
+@test "history: in a private repository, web-flow's commits need a merged pull request too" {
+    local c="repos/$OWNER/example/commits" since=2026-11-01T10:00:00Z
+    repo_ok example
+    printf '%s\n' $'aaaaaaa1\tweb-flow\ttrue' $'bbbbbbb2\tweb-flow\ttrue' |
+        gh_reply api --paginate "$c?sha=main&since=$since&per_page=100" --jq "$JQ_DIRECT"
+    printf '1\n' | gh_reply api "$c/aaaaaaa1/pulls" --jq "$JQ_MERGED"
+    printf '0\n' | gh_reply api "$c/bbbbbbb2/pulls" --jq "$JQ_MERGED"
+    run_status --checks history example
+    [ "$status" -eq 1 ]
+    has_line example history FAIL "a direct push to main: bbbbbbb"
+    [[ $output != *aaaaaaa* ]]
+}
+
+@test "history: a commit on main that GitHub did not make and sign is a FAIL, by short SHA only" {
+    VIS=public repo_ok example
     printf '0123456\tsomeone\ttrue\n1111111\tweb-flow\ttrue\n2222222\tweb-flow\tfalse\n' | gh_reply api --paginate \
         "repos/$OWNER/example/commits?sha=main&since=2026-11-01T10:00:00Z&per_page=100" --jq "$JQ_DIRECT"
     printf '0\n' | gh_reply api "repos/$OWNER/example/commits/0123456/pulls" --jq "$JQ_MERGED"
@@ -332,7 +392,7 @@ has_line() {
 # GitHub's own commit and costs none: the stub has no reply for it, so a GET would show.
 @test "history: only a pull request merged into main accepts a commit that GitHub did not make" {
     local c="repos/$OWNER/example/commits" since=2026-11-01T10:00:00Z
-    repo_ok example
+    VIS=public repo_ok example
     printf '%s\n' $'aaaaaaa1\tweb-flow\ttrue' $'bbbbbbb2\tsomeone\ttrue' \
         $'ccccccc3\tweb-flow\ttrue' $'ddddddd4\tsomeone\tfalse' $'eeeeeee5\tsomeone\ttrue' \
         $'fffffff6\tsomeone\ttrue' |

@@ -38,7 +38,8 @@ The rules that the copies hold this repository to. Tools and their error message
 `.github/standard.conf` is data, and only `bin/conf` reads it; nothing sources it. Each line is
 `KEY=value`, `#` starts a comment line, and a key appears once unless it repeats by design
 (`PRIVACY_ALLOW`, `PRIVACY_HISTORY_ACCEPT`, `VERSION_COPY`). `templates/standard.conf` in
-repo-standard lists every key with its default. The hooks read the config from `HEAD`, so a
+repo-standard lists every key with its default; without a `PRIVACY_RULES` line the `base` pack
+runs. `RELEASE_KIND=image` needs `IMAGE_PLATFORMS`. The hooks read the config from `HEAD`, so a
 change to it takes effect once it is committed.
 
 ### standard-check, rules 1 to 10

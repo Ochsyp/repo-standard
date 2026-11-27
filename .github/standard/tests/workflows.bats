@@ -285,6 +285,13 @@ contract_ci() {
         printf 'ci.yml: the test job checks out without the tags\n' >&2
         bad=1
     fi
+    # A title or body edited in the browser becomes the squash commit's message, so CI checks the
+    # pull request text again on every edit.
+    if [[ $(flat "$1" | awk -F '\t' '$1 == "on.pull_request.types" { print $2 }') != \
+        '[opened, synchronize, reopened, edited]' ]]; then
+        printf 'ci.yml: pull_request does not run again when the title or body is edited\n' >&2
+        bad=1
+    fi
     return "$bad"
 }
 
