@@ -17,5 +17,5 @@ version is newer. It needs no GitHub token for this and calls no API. A stolen G
 session can publish a release but cannot seal it, so none of the maintainer's hosts installs that
 release. A seal never moves and is never deleted: a tag ruleset on GitHub refuses to delete or
 move any `seal/*` tag, for every login, and repo-standard's `tools/status` checks that it is in
-place. A release that must not be installed stays unsealed, or is held on the hosts as the
-Release contract in `CONTRIBUTING.md` says.
+place. A release that the maintainer's hosts must not install stays unsealed, or is held on them
+as the Release contract in `CONTRIBUTING.md` says.

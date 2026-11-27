@@ -4,11 +4,11 @@ GitHub Actions builds each release, and the maintainer publishes it in the brows
 it: the maintainer's own hosts install a sealed release only. Anyone else downloads and installs
 a release without a seal.
 
-1. The release pull request `chore/release-X.Y.Z` is written with
-   `.github/standard/bin/release-prepare`: `VERSION`, the `VERSION_COPY` files, and the
-   `CHANGELOG.md` section with its links. Its body names the dependency updates since the last
-   release. CI checks the version, the date and the links. For a zip, tar or stack release, the
-   `release` workflow builds it twice and compares the builds.
+1. `.github/standard/bin/release-prepare` writes the release pull request `chore/release-X.Y.Z`:
+   `VERSION`, the `VERSION_COPY` files, and the `CHANGELOG.md` section with its links. Its body
+   names the dependency updates since the last release. CI checks the version, the date and the
+   links. For a zip, tar or stack release, the `release` workflow builds it twice and compares
+   the builds.
 2. The maintainer reviews and squash-merges it. The push to `main` that changes `VERSION` runs
    the `release` workflow: the checks of `ci` on that commit, the build, an attestation in the
    public repositories, and a draft release `vX.Y.Z` of that commit.

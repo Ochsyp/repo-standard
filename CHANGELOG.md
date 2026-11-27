@@ -24,8 +24,8 @@ Each version is the GitHub release `vX.Y.Z`.
 - A seal is optional for everyone but the maintainer: the `sealed-releases` and `releasing@seal`
   blocks and the config template say that the maintainer's own hosts install sealed releases
   only, and that anyone else downloads and installs a release without a seal
-- The `releasing` blocks' first step says that the release pull request is written with
-  `release-prepare`, not who opens it
+- The `releasing` blocks' first step says that `release-prepare` writes the release pull
+  request, not who opens it
 
 ## [1.3.1] - 2026-11-26
 
