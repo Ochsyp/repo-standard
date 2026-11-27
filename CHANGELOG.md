@@ -37,9 +37,26 @@ Each version is the GitHub release `vX.Y.Z`.
 - `tools/sync --init` adds the dependabot `github-actions` entry at `open-pull-requests-limit: 0`
   to an existing `.github/dependabot.yml` that lacks it, right below the block, instead of only
   noting it
+- The PowerShell starters `templates/ci/powershell/test.ps1` and `lint.ps1` read the Pester and
+  PSScriptAnalyzer versions from the copied `install-tools`, as repo-standard's own `ci/test.ps1`
+  does, so a new pin there needs no edit in a repository's own stages
+- `tools/status --checks settings` only warns about an extra Actions allow-list entry while the
+  config says `RELEASE_KIND=legacy`: a legacy release workflow may need it until the release
+  adoption
 
 ### Fixed
 
+- Texts that were no longer true:
+  - the release tarball leaves out `.editorconfig`, `.gitattributes` and `CONTRIBUTING.md`;
+  - only `tools/sync` checks that a release is published and immutable;
+  - the Release contract placeholder of `templates/CONTRIBUTING.md` asks for the hold under
+    `SEAL=yes` that the seal blocks point to;
+  - rule 9 is an error on the release pull request and a notice otherwise;
+  - a legacy release workflow meets the general rules except `actions.allow`;
+  - repo-standard's own CI comment and `conf`'s message forms;
+  - the public automated-checks block says that repo-standard's `tools/status` reports a Monday
+    scan GitHub turned off, the config template says that `RELEASE_KIND=image` needs
+    `IMAGE_PLATFORMS`, and the README points to the adoption checklist
 - A config without a `PRIVACY_RULES` line runs the `base` pack: `conf` defaults it to `base`, so
   leaving the line out no longer turns every rule pack off. An empty value still turns them off,
   in a `chore/privacy-*` pull request of its own

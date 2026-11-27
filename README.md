@@ -25,8 +25,8 @@ repository holds the canonical files at their real paths and publishes immutable
   consumer, of a public or a private shape, that holds only what the MANIFEST vendors plus files
   of its own, where CI runs the standard's suites again. `tests/` holds the tests of `tools/`.
 - `tools/sync`: writes a published release into a repository's worktree, run from a clone of
-  its tag. `--init` adopts a repository. `tools/status`: the read-only audit of the
-  repositories, run regularly.
+  its tag. `--init` adopts a repository (CONTRIBUTING.md, Adopting a repository).
+  `tools/status`: the read-only audit of the repositories, run regularly.
 - `tools/release-seal`, `tools/release-seal.ps1` and `tools/release-seal-askpass`: the seal tool
   of the repositories with `SEAL=yes`, its dialog and its passphrase dialog, released as assets
   and installed outside every clone (CONTRIBUTING.md, Release contract).

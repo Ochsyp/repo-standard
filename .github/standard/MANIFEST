@@ -11,10 +11,10 @@ file    all      0cbb587f8e8aea0fff4b1e61d129f1ccf7ebaacd  100644  .githooks/rul
 file    all      4a58f0f9a3fb9ce5db8f1413e9755e402ddcddb4  100644  .githooks/rules/disk
 file    all      a34753f7f764dd463fe795f388a243da0b1fcf91  100644  .githooks/rules/vm
 file    all      1fd68eab7ce3eeb367ffab3722137032ca82bdd3  100644  .github/pull_request_template.md
-file    all      5eb15172617ed3ded7d0fb8142af44d7e7987bbd  100644  .github/standard/README.md
+file    all      a93190523d07664dc58aecef2da8f01ae947d6e0  100644  .github/standard/README.md
 file    all      a29ad273f519ed29d86dd3c3af12f93517b9edba  100644  .github/standard/actions.allow
 file    all      237de99e763079c5c9d02838f8ddbe7f5bbb22d2  100755  .github/standard/bin/changelog-entry
-file    all      f65998008fc9c0af9f748352ef93177866bcb014  100755  .github/standard/bin/conf
+file    all      f05880fef17a14e3da9945ff34a815ff4e1301b2  100755  .github/standard/bin/conf
 file    all      b71ae4209e2649292304f5c44291c6d0a36fe2a8  100755  .github/standard/bin/install-tools
 file    all      d22aeb934c3513ca17d7fdf6ba4f45ec0ffc87aa  100644  .github/standard/bin/lib.bash
 file    all      896c9969b818ba9bdbb300858c3fe95058849a25  100755  .github/standard/bin/no-skips
@@ -41,7 +41,7 @@ file    all      d9451228eb2ab3bc8c37109d2c93b4ea9cbdba70  100755  .github/stand
 file    all      0dc7bf3a939fcbe91f4e89701b19d8374d0f9698  100755  .github/standard/tests/stub-bin/docker
 file    all      dad7a863872b9291df4d91ba0ca2a8e785ce2c6a  100755  .github/standard/tests/stub-bin/gh
 file    all      b9229271396615e2fab9ef1720eeaac20a4bb26f  100755  .github/standard/tests/stub-bin/gitleaks
-file    all      8fa81c300e11c417edb9f9dd968ac75b9bd0b01a  100755  .github/standard/tests/workflows.bats
+file    all      c3213f48a347fd07076e5c2c028d58e773fee782  100755  .github/standard/tests/workflows.bats
 file    all      b1ee58e732fe0e6cdd455e100dee4e8cb292a147  100644  .github/workflows/ci.yml
 file    release  8d25bcab5f0d32ccb3429b2d2666043746a53027  100644  .github/workflows/image.yml
 file    release  3fe3bb4f2ea134e66cdd098dee2e35f89642e7e3  100644  .github/workflows/release.yml
@@ -58,7 +58,7 @@ block   seal     6f47eac354592e976ac9143feaba03c5a821b159  -       CONTRIBUTING.
 block   all      50d5eb50402dbc4587f18afd0b144a026792a095  -       CONTRIBUTING.md#standard
 block   all      7e30f1be4881d0907233e745c8f8af887489bad1  -       CONTRIBUTING.md#workflow
 block   private  294a4f4990494de886e7c044bda468db8fa3f7d5  -       SECURITY.md#automated-checks@private
-block   public   5bf9c7d8c8bc839d2ac9d81e34837b384bfcb4f9  -       SECURITY.md#automated-checks@public
+block   public   1745eb87759fef0abe8be4b49e8de78aeab87aec  -       SECURITY.md#automated-checks@public
 block   private  c828e6428c3280d2da931787c7880ebadfd14b54  -       SECURITY.md#reporting@private
 block   public   cec24782757f5de75882626848f6ccf75c18a9cc  -       SECURITY.md#reporting@public
 block   seal     62e1a8123e81dd9242932628b0f39796e77c87f2  -       SECURITY.md#sealed-releases@seal

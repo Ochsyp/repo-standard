@@ -4,7 +4,8 @@
 # persist-credentials, triggers, expressions in scripts, top-level permissions, timeouts, GH_TOKEN,
 # image digests, and the contracts of ci.yml, secret-scan.yml and release.yml. Each rule runs over
 # this repository's workflows, and over a fixture that breaks it.
-# A legacy release.yml or image.yml (RELEASE_KIND=legacy) meets the general rules only.
+# A legacy release.yml or image.yml (RELEASE_KIND=legacy) meets the general rules except
+# actions.allow.
 
 # The awk programs and the YAML fixtures are single-quoted on purpose.
 # shellcheck disable=SC2016

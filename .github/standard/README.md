@@ -65,8 +65,9 @@ hooks read the config from `HEAD`, so a change to it takes effect once it is com
    repository.
 8. A path the standard removed does not come back: `.github/workflows/tests.yml`,
    `.github/workflows/validate.yml`, `.githooks/denylist.sh` and `.gitleaks.toml`.
-9. In repo-standard only: the `MANIFEST` equals the one rebuilt from the tree, and its own
-   documents hold the blocks its config selects.
+9. In repo-standard only: the `MANIFEST` equals the one rebuilt from the tree, an error on the
+   release pull request and a notice otherwise, and its own documents hold the blocks its config
+   selects.
 10. On a pull request, a change that loosens a check comes in a `chore/privacy-*` pull request of
     its own, from this repository, that changes only `.github/standard.conf`, `.gitleaksignore`
     and `CHANGELOG.md`. Loosening means:
@@ -98,7 +99,9 @@ them. The stage's script must fail on a failed test and on a skipped one: CI run
 - container and service images by digest.
 
 It also checks the contracts of `ci.yml`, `secret-scan.yml` and `release.yml`. A legacy
-`release.yml` or `image.yml` (`RELEASE_KIND=legacy`) meets the general rules only.
+`release.yml` or `image.yml` (`RELEASE_KIND=legacy`) meets the general rules except
+`actions.allow`, and `tools/status` only warns about an extra allow-list entry while
+`RELEASE_KIND=legacy`.
 
 ### The changelog and releases
 
