@@ -16,9 +16,9 @@
 #             VISIBILITY; the Actions allow-list equal to actions.allow (temporary entries warn
 #             until the adoption; github/codeql-action may stay) with SHA pinning; for a public
 #             repository the standard ruleset exactly on main (one of its branch rulesets), secret
-#             scanning and push protection; where
-#             the config says SEAL=yes, a tag ruleset that keeps every login from deleting or
-#             moving refs/tags/seal/*, and none that blocks creating a seal
+#             scanning and push protection; where the config says SEAL=yes, a tag ruleset that
+#             keeps every login from deleting or moving refs/tags/seal/*, and none that blocks
+#             creating a seal
 #   health    the last ci and secret-scan runs on main and the newest release's verify run are
 #             green; the weekly secret scan is active and ran in the last 8 days; no Dependabot
 #             pull request open more than 14 days; no draft waits to be published

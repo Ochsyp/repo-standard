@@ -151,8 +151,7 @@ MAX_BLOB_KB=1024" ]
     [[ $stderr == *"conf: RELEASE_KIND=image needs IMAGE_PLATFORMS"* ]]
     write_config RELEASE_KIND=image IMAGE_PLATFORMS=linux/amd64
     run_conf --check "$FILE"
-    [ "$status" -eq 0 ] || { printf '%s
-' "$stderr" >&2; return 1; }
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
 }
 
 @test "a CR line end, a trailing space and a tab are refused" {

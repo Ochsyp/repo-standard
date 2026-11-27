@@ -29,7 +29,7 @@ file    all      22d07ddae5d583537c2f27d52051c5bb76d7f53f  100755  .github/stand
 file    all      9014ed95df1a083e724d091582b6a3acd24f2ec7  100755  .github/standard/bin/run-stage
 file    all      7c96f4aacb3b0d8cddd410079e9778fa9ac166b4  100755  .github/standard/bin/secret-scan
 file    all      1768e14ea0085aa29617018c12230ad76b2d310c  100755  .github/standard/bin/standard-check
-file    all      d6d76c5b32f63e8ebfe9d1e67ee515ab49329928  100755  .github/standard/tests/conf.bats
+file    all      7ac24f47e6cbd93b6ea6d45438d6219e6ef1dbd8  100755  .github/standard/tests/conf.bats
 file    all      b89d28c2dfa1f6459f51bb6605109206446ad400  100755  .github/standard/tests/hooks.bats
 file    all      5b922b9bbc0b43ce419575826a09b4324e58b74b  100644  .github/standard/tests/lib.bash
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats
