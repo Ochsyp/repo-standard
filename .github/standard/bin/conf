@@ -13,9 +13,10 @@
 #                             run it from the top of the checkout (it reads the MANIFEST and git)
 #   conf --samples KIND       print the realistic values of a pack kind that the checks use
 # FILE defaults to .github/standard.conf. Exit 0; 1 when the file does not parse, each problem on
-# stderr as "conf: line N: ...", or as "conf: ..." for keys that do not go together (SEAL=yes
-# with RELEASE_KIND=legacy or VISIBILITY=private, RELEASE_KIND=image without IMAGE_PLATFORMS); 2
-# when a check cannot run; 64 usage. A message never shows a value from the file.
+# stderr as "conf: line N: ...", or as "conf: ..." for a missing required key and for keys that
+# do not go together (SEAL=yes with RELEASE_KIND=legacy or VISIBILITY=private, RELEASE_KIND=image
+# without IMAGE_PLATFORMS); 2 when a check cannot run; 64 usage. A message never shows a value
+# from the file.
 #
 # --ci reads EVENT (github.event_name), WORKFLOW (github.workflow: "release" when release.yml
 # calls ci.yml), PRIVATE (github.event.repository.private), BASE (the pull request's base, or a

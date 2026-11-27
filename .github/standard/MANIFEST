@@ -14,7 +14,7 @@ file    all      1fd68eab7ce3eeb367ffab3722137032ca82bdd3  100644  .github/pull_
 file    all      a93190523d07664dc58aecef2da8f01ae947d6e0  100644  .github/standard/README.md
 file    all      a29ad273f519ed29d86dd3c3af12f93517b9edba  100644  .github/standard/actions.allow
 file    all      237de99e763079c5c9d02838f8ddbe7f5bbb22d2  100755  .github/standard/bin/changelog-entry
-file    all      b01cc6af1781239ee3ac246d1b4ad5225e4387c4  100755  .github/standard/bin/conf
+file    all      f05880fef17a14e3da9945ff34a815ff4e1301b2  100755  .github/standard/bin/conf
 file    all      b71ae4209e2649292304f5c44291c6d0a36fe2a8  100755  .github/standard/bin/install-tools
 file    all      d22aeb934c3513ca17d7fdf6ba4f45ec0ffc87aa  100644  .github/standard/bin/lib.bash
 file    all      896c9969b818ba9bdbb300858c3fe95058849a25  100755  .github/standard/bin/no-skips

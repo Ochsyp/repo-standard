@@ -53,7 +53,10 @@ Each version is the GitHub release `vX.Y.Z`.
     `SEAL=yes` that the seal blocks point to;
   - rule 9 is an error on the release pull request and a notice otherwise;
   - a legacy release workflow meets the general rules except `actions.allow`;
-  - repo-standard's own CI comment and `conf`'s message forms
+  - repo-standard's own CI comment and `conf`'s message forms;
+  - the public automated-checks block says that repo-standard's `tools/status` reports a Monday
+    scan GitHub turned off, the config template says that `RELEASE_KIND=image` needs
+    `IMAGE_PLATFORMS`, and the README points to the adoption checklist
 - A config without a `PRIVACY_RULES` line runs the `base` pack: `conf` defaults it to `base`, so
   leaving the line out no longer turns every rule pack off. An empty value still turns them off,
   in a `chore/privacy-*` pull request of its own
