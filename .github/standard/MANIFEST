@@ -11,10 +11,10 @@ file    all      0cbb587f8e8aea0fff4b1e61d129f1ccf7ebaacd  100644  .githooks/rul
 file    all      4a58f0f9a3fb9ce5db8f1413e9755e402ddcddb4  100644  .githooks/rules/disk
 file    all      a34753f7f764dd463fe795f388a243da0b1fcf91  100644  .githooks/rules/vm
 file    all      1fd68eab7ce3eeb367ffab3722137032ca82bdd3  100644  .github/pull_request_template.md
-file    all      29c656163c06f775fece39c92c8d2781f0177310  100644  .github/standard/README.md
+file    all      a47465ceb06cab423d4f705ac8ff99ca9165edc3  100644  .github/standard/README.md
 file    all      a29ad273f519ed29d86dd3c3af12f93517b9edba  100644  .github/standard/actions.allow
 file    all      237de99e763079c5c9d02838f8ddbe7f5bbb22d2  100755  .github/standard/bin/changelog-entry
-file    all      687a9c08cf47d2c937846107f4fa0751b43cca6d  100755  .github/standard/bin/conf
+file    all      f65998008fc9c0af9f748352ef93177866bcb014  100755  .github/standard/bin/conf
 file    all      b71ae4209e2649292304f5c44291c6d0a36fe2a8  100755  .github/standard/bin/install-tools
 file    all      d22aeb934c3513ca17d7fdf6ba4f45ec0ffc87aa  100644  .github/standard/bin/lib.bash
 file    all      896c9969b818ba9bdbb300858c3fe95058849a25  100755  .github/standard/bin/no-skips
@@ -29,7 +29,7 @@ file    all      22d07ddae5d583537c2f27d52051c5bb76d7f53f  100755  .github/stand
 file    all      9014ed95df1a083e724d091582b6a3acd24f2ec7  100755  .github/standard/bin/run-stage
 file    all      7c96f4aacb3b0d8cddd410079e9778fa9ac166b4  100755  .github/standard/bin/secret-scan
 file    all      1768e14ea0085aa29617018c12230ad76b2d310c  100755  .github/standard/bin/standard-check
-file    all      7ac24f47e6cbd93b6ea6d45438d6219e6ef1dbd8  100755  .github/standard/tests/conf.bats
+file    all      53af74ad905dce2574fa536b3460d303bd37139f  100755  .github/standard/tests/conf.bats
 file    all      b89d28c2dfa1f6459f51bb6605109206446ad400  100755  .github/standard/tests/hooks.bats
 file    all      5b922b9bbc0b43ce419575826a09b4324e58b74b  100644  .github/standard/tests/lib.bash
 file    all      e99288d7e0b805cb5bc9c580d2242c82f2d026c7  100755  .github/standard/tests/lint.bats

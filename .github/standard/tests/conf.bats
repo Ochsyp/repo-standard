@@ -122,12 +122,12 @@ MAX_BLOB_KB=1024" ]
     run_conf --get SEAL "$FILE"
     [ "$status" -eq 0 ]
     [ "$output" = no ]
-    write_config SEAL=yes RELEASE_KIND=legacy
+    write_config VISIBILITY=public SEAL=yes RELEASE_KIND=legacy
     run_conf --check "$FILE"
     [ "$status" -eq 1 ]
     [[ $stderr == *"conf: SEAL=yes needs a RELEASE_KIND other than legacy"* ]]
     [ "$(grep -c '^conf: ' <<< "$stderr")" -eq 1 ]
-    write_config SEAL=yes RELEASE_KIND=stack
+    write_config VISIBILITY=public SEAL=yes RELEASE_KIND=stack
     run_conf --get SEAL "$FILE"
     [ "$status" -eq 0 ]
     [ "$output" = yes ]
@@ -150,6 +150,17 @@ MAX_BLOB_KB=1024" ]
     [ "$status" -eq 1 ]
     [[ $stderr == *"conf: RELEASE_KIND=image needs IMAGE_PLATFORMS"* ]]
     write_config RELEASE_KIND=image IMAGE_PLATFORMS=linux/amd64
+    run_conf --check "$FILE"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+}
+
+@test "SEAL=yes needs VISIBILITY=public: a private plan has no tag ruleset to protect the seals" {
+    write_config VISIBILITY=private SEAL=yes
+    run_conf --check "$FILE"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"conf: SEAL=yes needs VISIBILITY=public: make the repository public first,"* ]]
+    [[ $stderr == *"first, or keep SEAL off"* ]]
+    write_config VISIBILITY=public SEAL=yes
     run_conf --check "$FILE"
     [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
 }

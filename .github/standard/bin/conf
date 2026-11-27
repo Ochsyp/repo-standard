@@ -316,6 +316,13 @@ if [ "$mode" != --defaults ]; then
                 print "conf: SEAL=yes needs a RELEASE_KIND other than legacy" > "/dev/stderr"
                 bad = 1
             }
+            # A seal needs a tag ruleset that keeps every login from moving or deleting it, and
+            # the GitHub plan offers rulesets to public repositories only.
+            if (got["SEAL"] == "yes" && got["VISIBILITY"] == "private") {
+                print "conf: SEAL=yes needs VISIBILITY=public: make the repository public first," \
+                    " or keep SEAL off" > "/dev/stderr"
+                bad = 1
+            }
             # Without platforms CI never smoke-tests the image, and the release would push it
             # before release-build stops.
             if (got["RELEASE_KIND"] == "image" && got["IMAGE_PLATFORMS"] == "") {

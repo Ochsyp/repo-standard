@@ -42,6 +42,9 @@ Each version is the GitHub release `vX.Y.Z`.
   squash commit's message
 - `conf --check` refuses `RELEASE_KIND=image` without `IMAGE_PLATFORMS`, which would push an
   image that CI never smoke-tested
+- `conf --check` refuses `SEAL=yes` with `VISIBILITY=private`: a private repository's plan
+  offers no tag ruleset to protect the seals. Make the repository public first, or keep `SEAL`
+  off
 - `tools/status --checks health` fails when the weekly secret scan is no longer active or has not
   run for more than 8 days, and warns before its first run
 
