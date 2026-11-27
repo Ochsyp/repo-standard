@@ -20,13 +20,13 @@
 # CONTRIBUTING.md and SECURITY.md come from templates/ where DIR has none. A block whose markers
 # a file lacks is added at the head of a configuration file, or at the end of a document. At the
 # adoption, a .github/dependabot.yml without a github-actions entry for / gets one at limit 0,
-# right below the block. Last, it prints the pull request text: the changed files and blocks, the MANIFEST's
-# blob id and the CHANGELOG line. --summary replaces the line's default summary. Paths of this
-# machine are never printed. After that text, --init prints on stderr what the adoption must still
-# fix by hand, then what the target's standard-check, privacy-scan and release-meta find in what
-# sync staged, and points to repo-standard's CONTRIBUTING.md, Adopting a repository. Every run
-# notes a seal-only block left in a file where SEAL is not yes. The notes give line numbers, blob
-# ids, places and kinds, and never quote the repository's own text.
+# right below the block. Last, it prints the pull request text: the changed files and blocks,
+# the MANIFEST's blob id and the CHANGELOG line. --summary replaces the line's default summary.
+# Paths of this machine are never printed. After that text, --init prints on stderr what the
+# adoption must still fix by hand, then what the target's standard-check, privacy-scan and
+# release-meta find in what sync staged, and points to repo-standard's CONTRIBUTING.md, Adopting
+# a repository. Every run notes a seal-only block left in a file where SEAL is not yes. The notes
+# give line numbers, blob ids, places and kinds, and never quote the repository's own text.
 # Exit 0; 1 refused; 2 a step that cannot run; 64 usage.
 if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 set -euo pipefail
