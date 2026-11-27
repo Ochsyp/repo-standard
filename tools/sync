@@ -467,11 +467,13 @@ if (( init )); then
             note "$1: $((n - 20)) more line(s); run it in the target to see them."
         fi
     }
+    # Outside Actions, so the checks write plain lines, not annotations, wherever sync runs.
     relay standard-check < <(cd "$dir" &&
-        sh .github/standard/bin/standard-check --staged 2>&1 > /dev/null)
-    relay privacy-scan < <(cd "$dir" && sh .githooks/privacy-scan --tracked 2>&1 > /dev/null)
+        env -u GITHUB_ACTIONS sh .github/standard/bin/standard-check --staged 2>&1 > /dev/null)
+    relay privacy-scan < <(cd "$dir" &&
+        env -u GITHUB_ACTIONS sh .githooks/privacy-scan --tracked 2>&1 > /dev/null)
     relay release-meta < <(cd "$dir" && git tag -l 'v*' |
-        bash .github/standard/bin/release-meta check 2>&1 > /dev/null)
+        env -u GITHUB_ACTIONS bash .github/standard/bin/release-meta check 2>&1 > /dev/null)
     note "repo-standard's CONTRIBUTING.md, Adopting a repository, lists the steps that are left:" \
         "the ci/ stages, the GitHub settings and the maintainer's git setup."
 fi

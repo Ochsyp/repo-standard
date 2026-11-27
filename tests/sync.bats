@@ -517,3 +517,13 @@ own_lines() {
     [ "$(tail -n 1 "$TGT/.github/dependabot.yml")" = '# standard:end dependabot' ]
     git -C "$TGT" diff --cached --quiet -- .github/dependabot.yml
 }
+
+# In Actions the checks write their problems as annotations; the relayed notes stay plain text,
+# the same wherever sync runs.
+@test "sync --init relays the checks as plain notes, also where GITHUB_ACTIONS is true" {
+    make_target NAME=example VISIBILITY=public RELEASE_KIND=tar
+    GITHUB_ACTIONS=true run_sync --init --to "$TGT"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$stderr" >&2; return 1; }
+    [[ $stderr == *"sync: note: release-meta: VERSION is missing"* ]]
+    [[ $stderr != *"::error::"* && $stderr != *"::notice::"* ]]
+}
