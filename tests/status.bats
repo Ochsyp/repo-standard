@@ -232,7 +232,7 @@ has_line() {
     [ "$output" == "$STANDARD_RULESET" ] ||
         { printf 'got:  %q\nwant: %q\n' "$output" "$STANDARD_RULESET" >&2; return 1; }
     run jq -r "$JQ_RULESET" <<< "${ruleset/:false,/:true,}"
-    [[ $output == *$'\ttrue\t0' ]]
+    [[ $output == *$'\ttrue\t0\trefs/heads/main\t' ]]
 }
 
 # A ruleset with the right rules protects nothing when it targets another branch. Every branch
