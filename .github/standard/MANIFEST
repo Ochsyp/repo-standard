@@ -11,7 +11,7 @@ file    all      0cbb587f8e8aea0fff4b1e61d129f1ccf7ebaacd  100644  .githooks/rul
 file    all      4a58f0f9a3fb9ce5db8f1413e9755e402ddcddb4  100644  .githooks/rules/disk
 file    all      a34753f7f764dd463fe795f388a243da0b1fcf91  100644  .githooks/rules/vm
 file    all      1fd68eab7ce3eeb367ffab3722137032ca82bdd3  100644  .github/pull_request_template.md
-file    all      a47465ceb06cab423d4f705ac8ff99ca9165edc3  100644  .github/standard/README.md
+file    all      5eb15172617ed3ded7d0fb8142af44d7e7987bbd  100644  .github/standard/README.md
 file    all      a29ad273f519ed29d86dd3c3af12f93517b9edba  100644  .github/standard/actions.allow
 file    all      237de99e763079c5c9d02838f8ddbe7f5bbb22d2  100755  .github/standard/bin/changelog-entry
 file    all      f65998008fc9c0af9f748352ef93177866bcb014  100755  .github/standard/bin/conf

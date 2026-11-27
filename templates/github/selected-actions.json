@@ -1,0 +1,14 @@
+{
+  "github_owned_allowed": false,
+  "verified_allowed": false,
+  "patterns_allowed": [
+    "actions/checkout@*",
+    "actions/setup-python@*",
+    "actions/upload-artifact@*",
+    "actions/download-artifact@*",
+    "actions/attest@*",
+    "docker/setup-qemu-action@*",
+    "docker/setup-buildx-action@*",
+    "docker/build-push-action@*"
+  ]
+}

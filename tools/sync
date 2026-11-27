@@ -18,13 +18,15 @@
 # markers in the file first. --init adopts a repository that has a config and no MANIFEST yet.
 # It refuses a config that is not committed or differs from HEAD's: the hooks read it from HEAD.
 # CONTRIBUTING.md and SECURITY.md come from templates/ where DIR has none. A block whose markers
-# a file lacks is added at the head of a configuration file, or at the end of a document. A new
-# .github/dependabot.yml gets the github-actions entry at limit 0. Last, it prints the pull
-# request text: the changed files and blocks, the MANIFEST's blob id and the CHANGELOG line.
-# --summary replaces the line's default summary. Paths of this machine are never printed.
-# After that text, --init prints on stderr what the adoption must still fix by hand, and every
-# run notes a seal-only block left in a file where SEAL is not yes. The notes give line numbers
-# and blob ids and never quote the repository's own text.
+# a file lacks is added at the head of a configuration file, or at the end of a document. A
+# .github/dependabot.yml without a github-actions entry for / gets one at limit 0, right below
+# the block. Last, it prints the pull request text: the changed files and blocks, the MANIFEST's
+# blob id and the CHANGELOG line. --summary replaces the line's default summary. Paths of this
+# machine are never printed. After that text, --init prints on stderr what the adoption must still
+# fix by hand, then what the target's standard-check, privacy-scan and release-meta find in what
+# sync staged, and points to repo-standard's CONTRIBUTING.md, Adopting a repository. Every run
+# notes a seal-only block left in a file where SEAL is not yes. The notes give line numbers, blob
+# ids, places and kinds, and never quote the repository's own text.
 # Exit 0; 1 refused; 2 a step that cannot run; 64 usage.
 if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 set -euo pipefail
@@ -208,7 +210,20 @@ for pass in hooks rest; do
     done < "$tmp/entries"
 done
 
+# Print the open-pull-requests-limit of the github-actions entry for / in file $1: "none" when
+# the entry sets none, "absent" without the entry. standard-check's rule 6 reads it the same way.
+actions_limit() {
+    tr -d '\r' < "$1" | awk '
+        function value(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+#.*$/, "", s); gsub(/["\047]/, "", s); return s }
+        function flush() { if (eco == "github-actions" && dir == "/") { found = 1; out = (lim == "") ? "none" : lim } }
+        /^[ \t]*-[ \t]+package-ecosystem:/ { flush(); eco = value($0); dir = ""; lim = ""; next }
+        /^[ \t]+directory:/ { dir = value($0) }
+        /^[ \t]+open-pull-requests-limit:/ { lim = value($0) }
+        END { flush(); print found ? out : "absent" }'
+}
+
 # 2. The blocks, between their markers.
+actions_added=0
 while read -r type profile oid _ path; do
     [[ $type == block ]] || continue
     [[ $profile != release || $kind != legacy ]] || continue
@@ -263,6 +278,18 @@ while read -r type profile oid _ path; do
     if (( created )) && [[ $target == .github/dependabot.yml ]]; then
         printf '%s\n' '  - package-ecosystem: github-actions' '    directory: /' '    schedule:' \
             '      interval: weekly' '    open-pull-requests-limit: 0' >> "$tmp/new"
+    elif [[ $target == .github/dependabot.yml && $(actions_limit "$tmp/new") == absent ]]; then
+        # An existing file without the entry gets it right below the block, where the block's
+        # updates list goes on; standard-check refuses the file without it.
+        END_LINE=$end awk '
+            { print; line = $0; sub(/\r$/, "", line) }
+            line == ENVIRON["END_LINE"] && !done {
+                print "  - package-ecosystem: github-actions"; print "    directory: /"
+                print "    schedule:"; print "      interval: weekly"
+                print "    open-pull-requests-limit: 0"; done = 1
+            }' "$tmp/new" > "$tmp/new.actions" || fail "cannot add the github-actions entry"
+        cp "$tmp/new.actions" "$tmp/new"
+        actions_added=1
     fi
     if ! cmp -s "$tmp/new" "$file"; then
         cp "$tmp/new" "$file"
@@ -295,6 +322,10 @@ git -C "$dir" add -- .github/standard/MANIFEST || fail "cannot stage the MANIFES
 
 # 5. Under --init, what the adoption must still fix by hand.
 note() { notes+=("$*"); }
+if (( actions_added )); then
+    note ".github/dependabot.yml: sync added the github-actions entry for / at" \
+        "open-pull-requests-limit: 0 below the block's end marker."
+fi
 
 # Turn line numbers on stdin into "line N" or "lines N, M"; nothing for no input.
 at_lines() {
@@ -324,18 +355,6 @@ repeated_lines() {
         $0 == e { inside = 0; next }
         FNR == NR { if (inside && (k = key($0)) != "") want[k] = 1; next }
         !inside && (key($0) in want) { print FNR }' "$tmp/config" "$tmp/config"
-}
-
-# Print the open-pull-requests-limit of the github-actions entry for / in file $1: "none" when
-# the entry sets none, "absent" without the entry. standard-check's rule 6 reads it the same way.
-actions_limit() {
-    tr -d '\r' < "$1" | awk '
-        function value(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+#.*$/, "", s); gsub(/["\047]/, "", s); return s }
-        function flush() { if (eco == "github-actions" && dir == "/") { found = 1; out = (lim == "") ? "none" : lim } }
-        /^[ \t]*-[ \t]+package-ecosystem:/ { flush(); eco = value($0); dir = ""; lim = ""; next }
-        /^[ \t]+directory:/ { dir = value($0) }
-        /^[ \t]+open-pull-requests-limit:/ { lim = value($0) }
-        END { flush(); print found ? out : "absent" }'
 }
 
 if (( init )); then
@@ -430,6 +449,29 @@ if (( init )); then
     else
         note "the sizes of the tracked files could not be read, so MAX_BLOB_KB was not compared."
     fi
+    # Last, the target's own checks, run on what sync left staged, so the owner sees at once what
+    # is left. They print places, kinds and counts, never a value.
+    relay() {
+        local line n=0
+        while IFS= read -r line; do
+            line=${line%$'\r'}
+            case $line in
+                "" | "$1: ok" | "$1: hooks: "* | "$1: denylists: "*) continue ;;
+            esac
+            n=$((n + 1))
+            if (( n <= 20 )); then note "$line"; fi
+        done
+        if (( n > 20 )); then
+            note "$1: $((n - 20)) more line(s); run it in the target to see them."
+        fi
+    }
+    relay standard-check < <(cd "$dir" &&
+        sh .github/standard/bin/standard-check --staged 2>&1 > /dev/null)
+    relay privacy-scan < <(cd "$dir" && sh .githooks/privacy-scan --tracked 2>&1 > /dev/null)
+    relay release-meta < <(cd "$dir" && git tag -l 'v*' |
+        bash .github/standard/bin/release-meta check 2>&1 > /dev/null)
+    note "repo-standard's CONTRIBUTING.md, Adopting a repository, lists the steps that are left:" \
+        "the ci/ stages, the GitHub settings and the maintainer's git setup."
 fi
 
 # A block that exists only as a seal variant, such as SECURITY.md's sealed-releases, stays
